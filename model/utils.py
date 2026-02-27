@@ -105,74 +105,79 @@ class UNet(nn.Module):
 
         return out
 
+
 def dct_transform(x, chs_remove=None, chs_pad=False,
                   size=8, stride=8, pad=0, dilation=1, ratio=8):
     """
-        Transform a spatial image into its frequency channels.
-        Prune low-frequency channels if necessary.
+        支援長方形影像 (如 736x192) 的 DCT 轉換
     """
+    # 獲取維度資訊
+    b, c, h_old, w_old = x.shape
+    assert c == 3
 
-    # assert x is a (3, H, W) RGB image
-    assert x.shape[1] == 3
-
-    # convert the spatial image's range into [0, 1], recommended by TorchJPEG
+    # 1. 影像預處理
     x = x * 0.5 + 0.5
-
-    # up-sample
     x = F.interpolate(x, scale_factor=ratio, mode='bilinear', align_corners=True)
 
-    # convert to the YCbCr color domain, required by DCT
+    # 獲取放大後的維度
+    b, c, h, w = x.shape
+    h_block, w_block = h // size, w // size
+
+    # 2. 色彩空間轉換
     x = x * 255
     x = dct.to_ycbcr(x)
     x = x - 128
 
-    # perform block discrete cosine transform (BDCT)
-    b, c, h, w = x.shape
-    n_block = h // stride
-    x = x.view(b * c, 1, h, w)
-    x = F.unfold(x, kernel_size=(size, size), dilation=dilation, padding=pad, stride=(stride, stride))
-    x = x.transpose(1, 2)
-    x = x.view(b, c, -1, size, size)
+    # 3. 執行 Block DCT (修正 view 邏輯)
+    x = x.view(b, c, h_block, size, w_block, size)
+    x = x.permute(0, 1, 2, 4, 3, 5).contiguous()
+    x = x.view(b, c, h_block * w_block, size, size)
     x_freq = dct.block_dct(x)
-    x_freq = x_freq.view(b, c, n_block, n_block, size * size).permute(0, 1, 4, 2, 3)
 
-    # prune channels
+    # 重排為通道模式: (B, 3, 64, H_block, W_block)
+    x_freq = x_freq.view(b, c, h_block, w_block, size * size).permute(0, 1, 4, 2, 3)
+
+    # 4. 頻道修剪 (如果需要)
     if chs_remove is not None:
         channels = list(set([i for i in range(64)]) - set(chs_remove))
         if not chs_pad:
-            # simply remove channels
             x_freq = x_freq[:, :, channels, :, :]
         else:
-            # pad removed channels with zero, helpful for visualization
             x_freq[:, :, channels] = 0
 
-    # stack frequency channels from each color domain
-    x_freq = x_freq.reshape(b, -1, n_block, n_block)
+    # 5. 堆疊 Y, Cb, Cr 頻道 -> (B, 192, H_block, W_block)
+    x_freq = x_freq.reshape(b, -1, h_block, w_block)
 
     return x_freq
 
 
 def idct_transform(x, size=8, stride=8, pad=0, dilation=1, ratio=8):
     """
-        The inverse of DCT transform.
-        Transform frequency channels (must be 192 channels, can be padded with 0) back to the spatial image.
+        將 192 通道的頻域數據還原為空間域影像
     """
+    b, ch_total, h_freq, w_freq = x.shape
 
-    b, _, h, w = x.shape
+    # 1. 還原為區塊格式 (B, 3, 64, H_f, W_f)
+    x = x.view(b, 3, 64, h_freq, w_freq)
+    x = x.permute(0, 1, 3, 4, 2)  # -> (B, 3, H_f, W_f, 64)
+    x = x.view(b, 3, h_freq * w_freq, 8, 8)
 
-    x = x.view(b, 3, 64, h, w)
-    x = x.permute(0, 1, 3, 4, 2)
-    x = x.view(b, 3, h * w, 8, 8)
-    x = dct.block_idct(x)
-    x = x.view(b * 3, h * w, 64)
-    x = x.transpose(1, 2)
-    x = F.fold(x, output_size=(112 * ratio, 112 * ratio),
-               kernel_size=(size, size), dilation=dilation, padding=pad, stride=(stride, stride))
-    x = x.view(b, 3, 112 * ratio, 112 * ratio)
-    x = x + 128
-    x = dct.to_rgb(x)
-    x = x / 255
-    x = F.interpolate(x, scale_factor=1 / ratio, mode='bilinear', align_corners=True)
-    x = x.clamp(min=0.0, max=1.0)
-    return x
+    # 2. 執行 Block IDCT
+    x_spatial = dct.block_idct(x)
+
+    # 3. 重新拼湊像素塊 (修正 view 與 permute)
+    x_spatial = x_spatial.view(b, 3, h_freq, w_freq, 8, 8)
+    x_spatial = x_spatial.permute(0, 1, 2, 4, 3, 5).contiguous()
+    x_spatial = x_spatial.view(b, 3, h_freq * 8, w_freq * 8)
+
+    # 4. 色彩空間還原 (YCbCr -> RGB)
+    x_spatial = x_spatial + 128
+    x_spatial = dct.to_rgb(x_spatial)
+    x_spatial = x_spatial / 255.0
+
+    # 5. 縮小回原始比例 (如果當初有放大)
+    if ratio != 1:
+        x_spatial = F.interpolate(x_spatial, scale_factor=1 / ratio, mode='bilinear', align_corners=True)
+
+    return x_spatial
 

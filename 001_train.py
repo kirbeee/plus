@@ -1,11 +1,13 @@
-from torchkit.task.base_task import BaseTask
+import os
+import sys
 
-class TrainTask(BaseTask):
-    def __init__(self,vein_finger_file):
-        super().__init__(cfg_file=vein_finger_file)
+sys.path.append(os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', '..'))
+
 
 def main():
-    pass
+    task_dir = os.path.dirname(os.path.abspath(__file__))
+    task.init_env()
+    task.train()
 
 if __name__ == '__main__':
     main()

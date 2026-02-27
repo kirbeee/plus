@@ -2,3 +2,5 @@
 PLUSVein-FV3.zip
 PLUSVein-FV3/
 Privacy-Preserving_Face_Recognition_Using_Trainable_Feature_Subtraction.pdf
+__pycache__/
+.DS_Store

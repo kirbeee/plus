@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchkit.backbone import get_model
 from torchkit.loss import get_loss
-from utils import UNet, dct_transform, idct_transform
+from .utils import UNet, dct_transform, idct_transform
 
 
 

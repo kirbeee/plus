@@ -17,7 +17,7 @@ from model.model import MinusGenerativeModel
 # 1. 資料集準備 (Dataset)
 # ==========================================
 class PLUSVeinDataset(Dataset):
-    def __init__(self, pkl_file, mode='train', sensor='LED', img_size=(192, 736)):
+    def __init__(self, pkl_file, mode='train', sensor='LED', img_size=(256, 768)):
         super().__init__()
         with open(pkl_file, 'rb') as f:
             data = pickle.load(f)
@@ -134,7 +134,7 @@ def train():
     alpha = 5.0  # L1 生成損失權重
     beta = 1.0  # ArcFace 辨識損失權重
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    annot_file = 'dataset_annotation.pkl'  # 請替換為 000_make_data_set.py 輸出的檔案名稱
+    annot_file = 'annotations_plusvein.pkl'  # 請替換為 000_make_data_set.py 輸出的檔案名稱
 
     if not os.path.exists(annot_file):
         raise FileNotFoundError(f"找不到 {annot_file}，請先執行 000_make_data_set.py")

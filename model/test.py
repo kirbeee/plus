@@ -6,22 +6,14 @@ from utils import dct_transform, idct_transform
 
 
 def test_dct_with_original_size(image_path):
-    # 1. 讀取指靜脈影像 (RGB)
     img_bgr = cv2.imread(image_path)
-    if img_bgr is None:
-        print(f"錯誤：找不到影像檔案 {image_path}")
-        return
-
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    h, w, _ = img_rgb.shape
-    print(f"檢測到原始影像尺寸: {w}x{h}")  # 736x192
-
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)  # 736x192
     # 轉換為 Tensor (B, C, H, W) 並正規化到 [-1, 1]
     img_tensor = torch.from_numpy(img_rgb).permute(2, 0, 1).float()
     img_tensor = (img_tensor / 127.5) - 1.0
     img_tensor = img_tensor.unsqueeze(0)
 
-    # 2. 執行升維 (Spatial -> Frequency)
+    # 升維 (Spatial -> Frequency)
     # 如果你的電腦記憶體 (RAM/VRAM) 不夠，可以將 ratio 改小 (例如 1)
     with torch.no_grad():
         # 注意: ratio=8 會消耗大量記憶體，若報錯請試著改為 ratio=1
@@ -64,5 +56,4 @@ def test_dct_with_original_size(image_path):
 
 
 if __name__ == '__main__':
-    # 執行你的圖片
     test_dct_with_original_size('PLUS-FV3-Laser_DORSAL_01_001_02_01.png')

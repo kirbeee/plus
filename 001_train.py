@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
 from tqdm import tqdm
+import configs
 
 from model.utils import UNet, dct_transform
 from model.model import MinusGenerativeModel
@@ -126,11 +127,12 @@ class ArcFace(nn.Module):
 # ==========================================
 # 4. 主要訓練流程
 # ==========================================
-def train():
+def train(args):
     # --- 超參數設定 ---
-    batch_size = 16
+    configs.setup_seed(args.seed)
+    batch_size = args.bat
     epochs = 50
-    lr = 1e-4
+    lr = args.lr
     alpha = 5.0  # L1 生成損失權重
     beta = 1.0  # ArcFace 辨識損失權重
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -162,9 +164,9 @@ def train():
     criterion_fr = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam([
-        {'params': generator.parameters(), 'lr': lr},
-        {'params': recognizer.parameters(), 'lr': lr},
-        {'params': arcface_head.parameters(), 'lr': lr}
+        {'params': generator.parameters(), 'lr': lr,'weight_decay': args.weight_decay},
+        {'params': recognizer.parameters(), 'lr': lr, 'weight_decay': args.weight_decay},
+        {'params': arcface_head.parameters(), 'lr': lr, 'weight_decay': args.weight_decay}
     ])
 
     # --- 訓練迴圈 ---
@@ -228,4 +230,8 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    args = configs.get_all_params()
+    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    args.datasets = "PLUSVein-FV3"
+    args = configs.get_dataset_params(args)
+    train(args)

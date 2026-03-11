@@ -9,44 +9,10 @@ from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
 from tqdm import tqdm
 import configs
-from model.model_irse_dct import IR_50
+import datasets
 
 from model.utils import UNet, dct_transform
 from model.model import MinusGenerativeModel
-
-
-# ==========================================
-# 1. 資料集準備 (Dataset)
-# ==========================================
-class PLUSVeinDataset(Dataset):
-    def __init__(self, pkl_file, mode='train', sensor='LED', img_size=(256, 768)):
-        super().__init__()
-        with open(pkl_file, 'rb') as f:
-            data = pickle.load(f)
-
-        # 讀取對應感測器與模式的資料集
-        self.samples = data[sensor][f'{mode}_set']
-        self.img_size = img_size
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        path = self.samples[idx]['path']
-        label = self.samples[idx]['label']
-
-        # 讀取影像並轉換為 RGB
-        img = cv2.imread(path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        # 調整大小以確保可以被 DCT 區塊大小整除
-        img = cv2.resize(img, self.img_size)
-
-        # 轉換為 Tensor (C, H, W) 並正規化到 [-1, 1]
-        img_tensor = torch.from_numpy(img).permute(2, 0, 1).float()
-        img_tensor = (img_tensor / 127.5) - 1.0
-
-        return img_tensor, label
 
 # ==========================================
 # 2. 輕量化辨識模型 (Lightweight CNN for Vein)
@@ -137,13 +103,9 @@ def train(args):
     alpha = 5.0  # L1 生成損失權重
     beta = 1.0  # ArcFace 辨識損失權重
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    annot_file = 'annotations_plusvein.pkl'  # 請替換為 000_make_data_set.py 輸出的檔案名稱
-
-    if not os.path.exists(annot_file):
-        raise FileNotFoundError(f"找不到 {annot_file}，請先執行 000_make_data_set.py")
 
     # --- 資料加載 ---
-    train_dataset = PLUSVeinDataset(pkl_file=annot_file, mode='train', sensor='LED')
+    train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
     # 計算總類別數 (供 ArcFace 使用)

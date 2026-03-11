@@ -8,11 +8,12 @@ import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
+import configs
 # 匯入模型與工具 (請依據您的專案結構調整)
 from model.model import MinusGenerativeModel
 from model.utils import UNet, dct_transform, idct_transform
-from train_001 import PLUSVeinDataset , LightVeinCNN # 確保 train_001.py 在同目錄下或修改 import 路徑
-
+from train_001 import LightVeinCNN # 確保 train_001.py 在同目錄下或修改 import 路徑
+import datasets
 
 def visualize_results(orig, encoded, residue_img, save_path):
     """視覺化對比：原圖 vs 生成特徵還原圖 vs 隱私保護殘差圖"""
@@ -52,19 +53,19 @@ def channel_shuffle(x_freq, seed=42):
 
 
 def test(args):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    configs.setup_seed(args.seed)
 
     # 1. 載入測試資料
-    test_dataset = PLUSVeinDataset(pkl_file='annotations_plusvein.pkl', mode='test', sensor='LED')
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, persistent_workers=True, pin_memory=True)
 
     # 2. 初始化並載入訓練好的模型
-    generator = MinusGenerativeModel(mode='stage1', backbone=UNet).to(device)
-    recognizer = LightVeinCNN(in_channels=192, embedding_size=512).to(device)
+    generator = MinusGenerativeModel(mode='stage1', backbone=UNet).to(args.device)
+    recognizer = LightVeinCNN(in_channels=192, embedding_size=512).to(args.device)
 
     print("正在載入模型權重...")
-    generator.load_state_dict(torch.load('weights/best_generator.pth', map_location=device))
-    recognizer.load_state_dict(torch.load('weights/best_recognizer.pth', map_location=device))
+    generator.load_state_dict(torch.load('weights/best_generator.pth', map_location=args.device))
+    recognizer.load_state_dict(torch.load('weights/best_recognizer.pth', map_location=args.device))
 
     generator.eval()
     recognizer.eval()
@@ -79,12 +80,12 @@ def test(args):
 
     with torch.no_grad():
         for i, (imgs, labels) in enumerate(tqdm(test_loader)):
-            imgs, labels = imgs.to(device), labels.to(device)
+            imgs, labels = imgs.to(args.device), labels.to(args.device)
 
             # --- 核心推理流程 ---
             # a. 轉頻域
             print(imgs.shape)
-            x_freq = dct_transform(imgs, ratio=1)
+            x_freq = dct_transform(imgs, ratio=8)
 
             # b. 生成特徵
             x_encode, _ = generator(x_freq)
@@ -138,10 +139,8 @@ def test(args):
 
 
 if __name__ == '__main__':
-    class DummyArgs:
-        def __init__(self):
-            self.seed = 42
-
-
-    args = DummyArgs()
+    args = configs.get_all_params()
+    args.datasets = 'PLUSVein-FV3'
+    args = configs.get_dataset_params(args)
+    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     test(args)

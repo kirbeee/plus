@@ -97,19 +97,19 @@ class ArcFace(nn.Module):
 def train(args):
     # --- 超參數設定 ---
     configs.setup_seed(args.seed)
-    batch_size = 16
+    batch_size = args.batch_size
     epochs = 50
-    lr = 1e-4
+    lr = args.lr
     alpha = 5.0  # L1 生成損失權重
     beta = 1.0  # ArcFace 辨識損失權重
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # --- 資料加載 ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, persistent_workers=True, pin_memory=True, drop_last=True )
 
     # 計算總類別數 (供 ArcFace 使用)
-    num_classes = len(set([sample['label'] for sample in train_dataset.samples]))
+    num_classes =len(set(item['label'] for item in train_dataset.data))
     print(f"總訓練樣本數: {len(train_dataset)}, 總類別數: {num_classes}")
 
     # --- 模型初始化 ---
@@ -151,7 +151,7 @@ def train(args):
 
             # 1. 轉換至頻域 (Spatial -> Frequency)
             # x_freq 維度: (B, 192, H_block, W_block)
-            x_freq = dct_transform(imgs, ratio=1)
+            x_freq = dct_transform(imgs, ratio=8)
 
             # 2. 生成模型重建
             x_encode, x_latent = generator(x_freq)

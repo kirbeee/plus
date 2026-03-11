@@ -130,7 +130,7 @@ class ArcFace(nn.Module):
 def train(args):
     # --- 超參數設定 ---
     configs.setup_seed(args.seed)
-    batch_size = args.bat
+    batch_size = args.batch_size
     epochs = 50
     lr = args.lr
     alpha = 5.0  # L1 生成損失權重

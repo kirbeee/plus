@@ -7,7 +7,6 @@ from tqdm import tqdm
 import configs
 import datasets
 from torchkit.head.localfc.arcface import ArcFace
-from model.utils import  dct_transform
 from model.model import MinusBackbone
 
 
@@ -22,42 +21,39 @@ def train(args):
 
     # --- 超參數設定 ---
     configs.setup_seed(args.seed)
-    epochs = 50
-    alpha = 5.0  # L1 生成損失權重
-    beta = 1.0  # ArcFace 辨識損失權重
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    epochs = 25
+
+    # 根據 args.mode 設定權重 (Stage 2 不需要 L_gen)
+    if args.mode == 'stage1':
+        alpha = 5.0  # L_gen 權重
+        beta = 1.0  # L_fr 權重
+    else:  # stage2
+        alpha = 0.0  # 凍結生成器，不計算生成損失
+        beta = 1.0
 
     # --- 資料加載 ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, persistent_workers=True, pin_memory=True, drop_last=True )
-
-    # 計算總類別數 (供 ArcFace 使用)
     num_classes =len(set(item['label'] for item in train_dataset.data))
     print(f"總訓練樣本數: {len(train_dataset)}, 總類別數: {num_classes}")
 
     # --- 模型初始化 ---
-    # 1. 生成模型 (U-Net) -> 根據 MinusGenerativeModel，會自動使用 UNet(192, 192)
-    generator = MinusBackbone(mode='stage1').to(device)
-
-    # 2. 辨識模型 (LightCNN) -> 192 輸入通道
-    # recognizer = LightVeinCNN(in_channels=192, embedding_size=512).to(device)
-
-    # 3. ArcFace 分類頭
-    arcface_head = ArcFace(in_features=512, out_features=num_classes).to(device)
+    model = MinusBackbone(mode=args.mode).to(args.device)
+    arcface_head = ArcFace(in_features=512, out_features=num_classes).to(args.device)
 
     # --- 損失函數與優化器 ---
     criterion_gen = nn.L1Loss()
     criterion_fr = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam([
-        {'params': generator.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
+        {'params': model.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
         {'params': arcface_head.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay}
     ])
 
     # --- 訓練迴圈 ---
     best_loss = float('inf')
     for epoch in range(epochs):
-        generator.train()
+        model.train()
         arcface_head.train()
 
         total_loss = 0.0
@@ -65,15 +61,11 @@ def train(args):
         total_loss_fr = 0.0
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}")
+
         for imgs, labels in pbar:
-            imgs, labels = imgs.to(device), labels.to(device)
+            imgs, labels = imgs.to(args.device), labels.to(args.device)
 
-            optimizer.zero_grad()
-
-            # 2. 生成模型重建
-            x_encode, x_residue, x_feature, x_latent = generator(imgs)
-
-            x_freq = dct_transform(imgs, ratio=8)
+            x_encode, x_residue, x_feature, x_latent = model(imgs)
 
             # 4. 辨識模型特徵提取與 ArcFace 計算
             outputs = arcface_head(x_feature, labels)
@@ -115,8 +107,8 @@ def train(args):
             os.makedirs('weights', exist_ok=True)
 
             # 保存各個模組的權重
-            torch.save(generator.generator.state_dict(), 'weights/best_generator.pth')
-            torch.save(generator.recognizer.state_dict(), 'weights/best_recognizer.pth')
+            torch.save(model.generator.state_dict(), 'weights/best_generator.pth')
+            torch.save(model.recognizer.state_dict(), 'weights/best_recognizer.pth')
 
 
 if __name__ == '__main__':
@@ -124,4 +116,7 @@ if __name__ == '__main__':
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
+    args.mode = "stage1"
+    train(args)
+    args.mode = "stage2"
     train(args)

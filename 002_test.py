@@ -1,6 +1,5 @@
 import os
 import torch
-import cv2
 import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -8,12 +7,10 @@ import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
-import configs
-# 匯入模型與工具 (請依據您的專案結構調整)
-from model.model import MinusGenerativeModel
+from model.model import MinusGenerativeModel,LightVeinCNN
 from model.utils import UNet, dct_transform, idct_transform
-from train_001 import LightVeinCNN # 確保 train_001.py 在同目錄下或修改 import 路徑
 import datasets
+import configs
 
 def visualize_results(orig, encoded, residue_img, save_path):
     """視覺化對比：原圖 vs 生成特徵還原圖 vs 隱私保護殘差圖"""

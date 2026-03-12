@@ -12,43 +12,7 @@ import configs
 import datasets
 
 from model.utils import UNet, dct_transform
-from model.model import MinusGenerativeModel
-
-# ==========================================
-# 2. 輕量化辨識模型 (Lightweight CNN for Vein)
-# ==========================================
-class LightVeinCNN(nn.Module):
-    """
-    針對指靜脈特徵設計的輕量級 CNN，替換原本龐大的 IR-50。
-    輸入通道設定為 192 以匹配 DCT 輸出。
-    """
-
-    def __init__(self, in_channels=192, embedding_size=512):
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2),
-
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2),
-
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d((1, 1))  # Global Average Pooling
-        )
-        self.fc = nn.Linear(256, embedding_size)
-
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x
-
+from model.model import MinusGenerativeModel, LightVeinCNN, MinusBackbone
 
 
 # ==========================================
@@ -95,11 +59,14 @@ class ArcFace(nn.Module):
 # 4. 主要訓練流程
 # ==========================================
 def train(args):
+    """
+    stage1
+    stage2
+    """
+
     # --- 超參數設定 ---
     configs.setup_seed(args.seed)
-    batch_size = args.batch_size
     epochs = 50
-    lr = args.lr
     alpha = 5.0  # L1 生成損失權重
     beta = 1.0  # ArcFace 辨識損失權重
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -114,10 +81,10 @@ def train(args):
 
     # --- 模型初始化 ---
     # 1. 生成模型 (U-Net) -> 根據 MinusGenerativeModel，會自動使用 UNet(192, 192)
-    generator = MinusGenerativeModel(mode='stage1', backbone=UNet).to(device)
+    generator = MinusBackbone(mode='stage1').to(device)
 
     # 2. 辨識模型 (LightCNN) -> 192 輸入通道
-    recognizer = LightVeinCNN(in_channels=192, embedding_size=512).to(device)
+    # recognizer = LightVeinCNN(in_channels=192, embedding_size=512).to(device)
 
     # 3. ArcFace 分類頭
     arcface_head = ArcFace(in_features=512, out_features=num_classes).to(device)
@@ -127,16 +94,14 @@ def train(args):
     criterion_fr = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam([
-        {'params': generator.parameters(), 'lr': lr,'weight_decay': args.weight_decay},
-        {'params': recognizer.parameters(), 'lr': lr, 'weight_decay': args.weight_decay},
-        {'params': arcface_head.parameters(), 'lr': lr, 'weight_decay': args.weight_decay}
+        {'params': generator.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
+        {'params': arcface_head.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay}
     ])
 
     # --- 訓練迴圈 ---
     best_loss = float('inf')
     for epoch in range(epochs):
         generator.train()
-        recognizer.train()
         arcface_head.train()
 
         total_loss = 0.0

@@ -41,6 +41,26 @@ def train(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
     arcface_head = ArcFace(in_features=512, out_features=num_classes).to(args.device)
 
+    if args.mode == 'stage2':
+        print("正在進入 Stage 2... 嘗試載入 Stage 1 權重")
+
+        # 1. 載入生成器權重 (這是最重要的)
+        if os.path.exists('weights/best_generator.pth'):
+            model.generator.load_state_dict(torch.load('weights/best_generator.pth'))
+            print("Successfully loaded pre-trained Generator from Stage 1.")
+        else:
+            print("Warning: No Stage 1 weights found! Stage 2 will start from scratch (Not Recommended).")
+
+        # 2. (選做) 載入辨識器權重：如果你想在 Stage 1 的基礎上繼續微調
+        if os.path.exists('weights/best_recognizer_stage1.pth'):
+            model.recognizer.load_state_dict(torch.load('weights/best_recognizer_stage1.pth'))
+            print("Successfully loaded pre-trained Recognizer from Stage 1.")
+
+        # 3. 凍結生成器 (Stage 2 核心要求)
+        for param in model.generator.parameters():
+            param.requires_grad = False
+        model.generator.eval()  # 確保 BatchNorm/Dropout 狀態固定
+
     # --- 損失函數與優化器 ---
     criterion_gen = nn.L1Loss()
     criterion_fr = nn.CrossEntropyLoss()

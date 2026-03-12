@@ -9,16 +9,7 @@ import datasets
 from torchkit.head.localfc.arcface import ArcFace
 from model.model import MinusBackbone
 
-
-# ==========================================
-# 4. 主要訓練流程
-# ==========================================
 def train(args):
-    """
-    stage1
-    stage2
-    """
-
     # --- 超參數設定 ---
     configs.setup_seed(args.seed)
     epochs = 25
@@ -51,11 +42,6 @@ def train(args):
         else:
             print("Warning: No Stage 1 weights found! Stage 2 will start from scratch (Not Recommended).")
 
-        # 2. (選做) 載入辨識器權重：如果你想在 Stage 1 的基礎上繼續微調
-        if os.path.exists('weights/best_recognizer_stage1.pth'):
-            model.recognizer.load_state_dict(torch.load('weights/best_recognizer_stage1.pth'))
-            print("Successfully loaded pre-trained Recognizer from Stage 1.")
-
         # 3. 凍結生成器 (Stage 2 核心要求)
         for param in model.generator.parameters():
             param.requires_grad = False
@@ -84,7 +70,7 @@ def train(args):
 
         for imgs, labels in pbar:
             imgs, labels = imgs.to(args.device), labels.to(args.device)
-
+            optimizer.zero_grad()
             x_encode, x_residue, x_feature, x_latent = model(imgs)
 
             # 4. 辨識模型特徵提取與 ArcFace 計算

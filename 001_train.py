@@ -80,7 +80,7 @@ def train(args):
             # L_gen: 生成特徵必須逼近原始頻域特徵
             loss_gen = criterion_gen(x_encode, imgs)
             # L_fr: 殘差必須能被辨識出正確的身分
-            loss_fr = criterion_fr(outputs, labels)
+            loss_fr = criterion_fr(outputs[0], labels)
             # L_minus = alpha * L_gen + beta * L_fr
             loss = alpha * loss_gen + beta * loss_fr
 

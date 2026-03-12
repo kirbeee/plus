@@ -114,27 +114,19 @@ def train(args):
 
             optimizer.zero_grad()
 
-            # 1. 轉換至頻域 (Spatial -> Frequency)
-            # x_freq 維度: (B, 192, H_block, W_block)
+            # 2. 生成模型重建
+            x_encode, x_residue, x_feature, x_latent = generator(imgs)
+
             x_freq = dct_transform(imgs, ratio=8)
 
-            # 2. 生成模型重建
-            x_encode, x_latent = generator(x_freq)
-
-            # 3. 高維度特徵相減 (Residue Calculation)
-            # 公式: r = x - x'
-            r = x_freq - x_encode
-
             # 4. 辨識模型特徵提取與 ArcFace 計算
-            embeddings = recognizer(r)
-            outputs = arcface_head(embeddings, labels)
+            outputs = arcface_head(x_feature, labels)
 
             # 5. 計算損失函數
             # L_gen: 生成特徵必須逼近原始頻域特徵
             loss_gen = criterion_gen(x_encode, x_freq)
             # L_fr: 殘差必須能被辨識出正確的身分
             loss_fr = criterion_fr(outputs, labels)
-
             # L_minus = alpha * L_gen + beta * L_fr
             loss = alpha * loss_gen + beta * loss_fr
 
@@ -167,9 +159,8 @@ def train(args):
             os.makedirs('weights', exist_ok=True)
 
             # 保存各個模組的權重
-            torch.save(generator.state_dict(), 'weights/best_generator.pth')
-            torch.save(recognizer.state_dict(), 'weights/best_recognizer.pth')
-            torch.save(arcface_head.state_dict(), 'weights/best_arcface.pth')
+            torch.save(generator.generator.state_dict(), 'weights/best_generator.pth')
+            torch.save(generator.recognizer.state_dict(), 'weights/best_recognizer.pth')
 
 
 if __name__ == '__main__':

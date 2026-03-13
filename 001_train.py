@@ -51,7 +51,7 @@ def train(args):
     criterion_gen = nn.L1Loss()
     criterion_fr = nn.CrossEntropyLoss()
 
-    optimizer = optim.Adam([
+    optimizer = optim.AdamW([
         {'params': model.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
         {'params': arcface_head.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay}
     ])

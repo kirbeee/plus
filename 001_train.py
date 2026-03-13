@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
 import configs
 import datasets
@@ -14,28 +15,25 @@ def train(args):
     configs.setup_seed(args.seed)
     epochs = 25
 
-    # 根據 args.mode 設定權重 (Stage 2 不需要 L_gen)
     if args.mode == 'stage1':
-        alpha = 5.0  # L_gen 權重
-        beta = 1.0  # L_fr 權重
+        alpha = 5.0
+        beta = 1.0
     else:  # stage2
-        alpha = 0.0  # 凍結生成器，不計算生成損失
+        alpha = 0.0
         beta = 1.0
 
-    # --- 資料加載 ---
+    # --- data loading ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, persistent_workers=True, pin_memory=True, drop_last=True )
     num_classes =len(set(item['label'] for item in train_dataset.data))
     print(f"總訓練樣本數: {len(train_dataset)}, 總類別數: {num_classes}")
 
-    # --- 模型初始化 ---
+    # --- model initialize ---
     model = MinusBackbone(mode=args.mode).to(args.device)
     arcface_head = ArcFace(in_features=512, out_features=num_classes).to(args.device)
 
     if args.mode == 'stage2':
-        print("正在進入 Stage 2... 嘗試載入 Stage 1 權重")
-
-        # 1. 載入生成器權重 (這是最重要的)
+        # 1. load Stage 1 Generator weights
         if os.path.exists('weights/best_generator.pth'):
             model.generator.load_state_dict(torch.load('weights/best_generator.pth'))
             print("Successfully loaded pre-trained Generator from Stage 1.")
@@ -47,14 +45,14 @@ def train(args):
             param.requires_grad = False
         model.generator.eval()  # 確保 BatchNorm/Dropout 狀態固定
 
-    # --- 損失函數與優化器 ---
-    criterion_gen = nn.L1Loss()
-    criterion_fr = nn.CrossEntropyLoss()
+    # --- Optimizer ---
 
     optimizer = optim.AdamW([
         {'params': model.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
         {'params': arcface_head.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay}
     ])
+    # weight decay
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
 
     # --- 訓練迴圈 ---
     best_loss = float('inf')
@@ -78,15 +76,16 @@ def train(args):
 
             # 5. 計算損失函數
             # L_gen: 生成特徵必須逼近原始頻域特徵
-            loss_gen = criterion_gen(x_encode, imgs)
+            loss_gen = nn.L1Loss(x_encode, imgs)
             # L_fr: 殘差必須能被辨識出正確的身分
-            loss_fr = criterion_fr(outputs[0], labels)
+            loss_fr = nn.CrossEntropyLoss(outputs[0], labels)
             # L_minus = alpha * L_gen + beta * L_fr
             loss = alpha * loss_gen + beta * loss_fr
 
             # 6. 反向傳播與參數更新
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             # 記錄 Loss
             total_loss += loss.item()
@@ -103,9 +102,7 @@ def train(args):
               f"| Avg L_gen: {total_loss_gen / len(train_loader):.4f} "
               f"| Avg L_fr: {total_loss_fr / len(train_loader):.4f}")
 
-        # ==========================================
-        # 新增：保存最佳模型權重
-        # ==========================================
+        # save model weights
         avg_loss = total_loss / len(train_loader)
         if avg_loss < best_loss:
             best_loss = avg_loss

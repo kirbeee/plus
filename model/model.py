@@ -162,38 +162,3 @@ class MinusLoss(nn.Module):
 
             loss = loss_gen + loss_fr + loss_ls
             return loss, loss_gen, loss_fr, loss_ls
-
-# ==========================================
-# 2. 輕量化辨識模型 (Lightweight CNN for Vein)
-# ==========================================
-class LightVeinCNN(nn.Module):
-    """
-    針對指靜脈特徵設計的輕量級 CNN，替換原本龐大的 IR-50。
-    輸入通道設定為 192 以匹配 DCT 輸出。
-    """
-
-    def __init__(self, in_channels=192, embedding_size=512):
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2),
-
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2),
-
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d((1, 1))  # Global Average Pooling
-        )
-        self.fc = nn.Linear(256, embedding_size)
-
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x

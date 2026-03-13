@@ -4,10 +4,9 @@ warnings.filterwarnings("ignore")
 
 import os
 import torch
-import models
 import datasets
 import random
-from utils import *
+# from utils import *
 from tqdm import tqdm
 from pytorch_model_summary import summary
 from ptflops import get_model_complexity_info
@@ -17,10 +16,10 @@ import numpy as np
 import sklearn.metrics as skm
 from sklearn.model_selection import KFold
 from tqdm.contrib import tzip
-
+from model.model import MinusBackbone
 
 def _get_model(args):
-    model = models.Model(num_classes=args.classes).to(args.device)
+    model = MinusBackbone().to(args.device)
     return model
 
 
@@ -141,7 +140,7 @@ def main(args, database_results={}):
 
         best_eer = float('inf')
         for metrics in ['Loss', 'Acc', 'F1']:
-            weights = torch.load(os.path.join(args.root_model, str(data_type), f"Backbone_ckpt.best{metrics}.pth.tar"))
+            weights = torch.load("weights/best_generator.pth")
 
             model.load_state_dict(weights['model_state_dict'])
             eer, acc = evaluate(args, model, test_DataLoader)

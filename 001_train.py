@@ -51,8 +51,12 @@ def train(args):
         {'params': model.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
         {'params': arcface_head.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay}
     ])
+
+    criterion_gen = nn.L1Loss()
+    criterion_fr = nn.CrossEntropyLoss()
+
     # weight decay
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+    # scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
 
     # --- 訓練迴圈 ---
     best_loss = float('inf')
@@ -76,16 +80,16 @@ def train(args):
 
             # 5. 計算損失函數
             # L_gen: 生成特徵必須逼近原始頻域特徵
-            loss_gen = nn.functional.l1_loss(x_encode, imgs)
+            loss_gen = criterion_gen(x_encode, imgs)
             # L_fr: 殘差必須能被辨識出正確的身分
-            loss_fr = nn.functional.cross_entropy(outputs[0], labels)
+            loss_fr = criterion_fr(outputs[0], labels)
             # L_minus = alpha * L_gen + beta * L_fr
             loss = alpha * loss_gen + beta * loss_fr
 
             # 6. 反向傳播與參數更新
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            # scheduler.step()
 
             # 記錄 Loss
             total_loss += loss.item()

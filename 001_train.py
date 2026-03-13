@@ -76,9 +76,9 @@ def train(args):
 
             # 5. 計算損失函數
             # L_gen: 生成特徵必須逼近原始頻域特徵
-            loss_gen = nn.L1Loss(x_encode, imgs)
+            loss_gen = nn.functional.l1_loss(x_encode, imgs)
             # L_fr: 殘差必須能被辨識出正確的身分
-            loss_fr = nn.CrossEntropyLoss(outputs[0], labels)
+            loss_fr = nn.functional.cross_entropy(outputs[0], labels)
             # L_minus = alpha * L_gen + beta * L_fr
             loss = alpha * loss_gen + beta * loss_fr
 

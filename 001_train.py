@@ -3,24 +3,24 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
 import configs
 import datasets
 from torchkit.head.localfc.arcface import ArcFace
 from model.model import MinusBackbone
 
-def train(args):
-    # --- 超參數設定 ---
+def train():
+    # --- hyperparameter ---
     configs.setup_seed(args.seed)
     epochs = 25
-
     if args.mode == 'stage1':
         alpha = 5.0
         beta = 1.0
-    else:  # stage2
+    elif args.mode == 'stage2':
         alpha = 0.0
         beta = 1.0
+    else:
+        raise ValueError("Invalid mode! Mode must be 'stage1' or 'stage2'.")
 
     # --- data loading ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
@@ -124,6 +124,6 @@ if __name__ == '__main__':
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
     args.mode = "stage1"
-    train(args)
+    train()
     args.mode = "stage2"
-    train(args)
+    train()

@@ -35,7 +35,7 @@ def visualize_stages():
 
     # 3. 模擬 Stage 1 流程
     model_s1 = MinusBackbone(mode='stage1').to(device)
-    # 若有權重，請在此載入: model_s1.generator.load_state_dict(torch.load('weights/best_generator.pth'))
+    model_s1.generator.load_state_dict(torch.load('../weights/best_generator.pth'))
     model_s1.eval()
 
     with torch.no_grad():
@@ -49,7 +49,7 @@ def visualize_stages():
 
     # 5. 使用 Matplotlib 繪圖
     fig, axes = plt.subplots(1, 4, figsize=(15, 6))
-
+    print(img_tensor.size())
     axes[0].imshow(tensor_to_np(img_tensor))
     axes[0].set_title("Original Image (Input)")
 

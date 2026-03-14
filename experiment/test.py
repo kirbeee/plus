@@ -2,7 +2,10 @@ import torch
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import dct_transform, idct_transform
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from model.utils import dct_transform, idct_transform
 
 
 def test_dct_with_original_size(image_path):
@@ -56,4 +59,4 @@ def test_dct_with_original_size(image_path):
 
 
 if __name__ == '__main__':
-    test_dct_with_original_size('PLUS-FV3-Laser_DORSAL_01_001_02_01.png')
+    test_dct_with_original_size('PLUS-FV3-LED_DORSAL_01_001_02_01.png')

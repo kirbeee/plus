@@ -11,14 +11,14 @@ import torch.nn.functional as F
 def get_padding(image):
     imsize = image.shape
     max_length = max(imsize[1], imsize[2])
-    h_padding = (max_length - imsize[1]) / 2
-    v_padding = (max_length - imsize[2]) / 2
+    h_padding = (max_length - imsize[2]) / 2
+    v_padding = (max_length - imsize[1]) / 2
 
     l_pad = h_padding if h_padding % 1 == 0 else h_padding+0.5
     t_pad = v_padding if v_padding % 1 == 0 else v_padding+0.5
     r_pad = h_padding if h_padding % 1 == 0 else h_padding-0.5
     b_pad = v_padding if v_padding % 1 == 0 else v_padding-0.5
-    return (int(l_pad), int(t_pad), int(r_pad), int(b_pad))
+    return (int(l_pad), int(r_pad), int(t_pad), int(b_pad))
 
 
 class NewPad(object):

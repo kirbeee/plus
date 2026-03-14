@@ -1,27 +1,17 @@
 import os
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.optim as optim
 from tqdm import tqdm
 import configs
 import datasets
 from torchkit.head.localfc.arcface import ArcFace
-from model.model import MinusBackbone
+from model.model import MinusBackbone, MinusLoss
 
 def train():
     # --- hyperparameter ---
     configs.setup_seed(args.seed)
     epochs = 25
-    if args.mode == 'stage1':
-        alpha = 5.0
-        beta = 1.0
-    elif args.mode == 'stage2':
-        alpha = 0.0
-        beta = 1.0
-    else:
-        raise ValueError("Invalid mode! Mode must be 'stage1' or 'stage2'.")
-
     # --- data loading ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, persistent_workers=True, pin_memory=True, drop_last=True )
@@ -52,11 +42,7 @@ def train():
         {'params': arcface_head.parameters(), 'lr':0.1, 'weight_decay': args.weight_decay}
     ])
 
-    criterion_gen = nn.L1Loss()
-    criterion_fr = nn.CrossEntropyLoss()
-
-    # weight decay
-    # scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+    criterion = MinusLoss(mode=args.mode).to(args.device)
 
     # --- 訓練迴圈 ---
     best_loss = float('inf')
@@ -78,18 +64,11 @@ def train():
             # 4. 辨識模型特徵提取與 ArcFace 計算
             outputs = arcface_head(x_feature, labels)
 
-            # 5. 計算損失函數
-            # L_gen: 生成特徵必須逼近原始頻域特徵
-            loss_gen = criterion_gen(x_encode, imgs)
-            # L_fr: 殘差必須能被辨識出正確的身分
-            loss_fr = criterion_fr(outputs[0], labels)
-            # L_minus = alpha * L_gen + beta * L_fr
-            loss = alpha * loss_gen + beta * loss_fr
+            loss, loss_gen, loss_fr, loss_ls = criterion(imgs, x_encode, x_latent, outputs[0], labels)
 
             # 6. 反向傳播與參數更新
             loss.backward()
             optimizer.step()
-            # scheduler.step()
 
             # 記錄 Loss
             total_loss += loss.item()

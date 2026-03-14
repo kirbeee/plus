@@ -8,6 +8,7 @@ import sklearn.metrics as skm
 import configs
 import datasets
 from model.model import MinusBackbone
+import matplotlib.pyplot as plt
 
 
 def load_backbone(args):
@@ -23,7 +24,7 @@ def load_backbone(args):
         model.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
         print("成功載入 Generator 與 Recognizer 權重")
     else:
-        print("警告：找不到權重檔案，將使用隨機初始化模型")
+        raise("import model failed!")
 
     model.eval()
     return model
@@ -42,7 +43,6 @@ def evaluate(args, model, test_loader):
     embeds_list = []
     targets_list = []
 
-    print("正在提取特徵...")
     with torch.no_grad():
         for imgs, labels in tqdm(test_loader):
             imgs = imgs.to(args.device)
@@ -57,7 +57,6 @@ def evaluate(args, model, test_loader):
     embeddings = torch.cat(embeds_list, dim=0)
     targets = torch.cat(targets_list, dim=0)
 
-    print("正在計算相似度矩陣...")
     # 使用矩陣乘法快速計算 Cosine Similarity: (N, 512) @ (512, N) -> (N, N)
     sim_matrix = torch.mm(embeddings, embeddings.t()).numpy()
 
@@ -72,7 +71,6 @@ def evaluate(args, model, test_loader):
     scores = sim_matrix[mask]
     actual_labels = label_matrix[mask]
 
-    print("正在計算指標...")
     eer, threshold = calculate_eer(actual_labels, scores)
 
     # 計算特定閾值下的準確度
@@ -88,20 +86,16 @@ def main():
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
 
-    # 針對 LED 和 LASER 兩種光源分別測試
     results = {}
-    for data_type in ['LED', 'LASER']:
-        print(f"\n--- 測試數據類型: {data_type} ---")
-        test_dataset = datasets.ImagesDataset(args=args, data_type=data_type, phase='test')
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+    print(f"\n--- 測試數據類型: LED ---")
+    test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
-        model = load_backbone(args)
-        eer, acc = evaluate(args, model, test_loader)
+    model = load_backbone(args)
+    eer, acc = evaluate(args, model, test_loader)
 
-        results[data_type] = {'EER': f"{eer * 100:.2f}%", 'ACC': f"{acc * 100:.2f}%"}
-        print(f"結果 [{data_type}]: EER = {eer * 100:.2f}%, ACC = {acc * 100:.2f}%")
-
-    print("\n最終總結:", results)
+    results["LED"] = {'EER': f"{eer * 100:.2f}%", 'ACC': f"{acc * 100:.2f}%"}
+    print(f"結果 [LED]: EER = {eer * 100:.2f}%, ACC = {acc * 100:.2f}%")
 
 
 if __name__ == '__main__':

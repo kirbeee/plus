@@ -30,7 +30,7 @@ def train():
 
     # --- model initialize ---
     model = MinusBackbone(mode=args.mode).to(args.device)
-    arcface_head = ArcFace(in_features=512, out_features=num_classes).to(args.device)
+    arcface_head = ArcFace(in_features=512,scale=32, out_features=num_classes).to(args.device)
 
     if args.mode == 'stage2':
         # 1. load Stage 1 Generator weights
@@ -49,7 +49,7 @@ def train():
 
     optimizer = optim.AdamW([
         {'params': model.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
-        {'params': arcface_head.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay}
+        {'params': arcface_head.parameters(), 'lr':0.1, 'weight_decay': args.weight_decay}
     ])
 
     criterion_gen = nn.L1Loss()
@@ -113,7 +113,6 @@ def train():
             print(f"--> 發現更低的 Loss ({best_loss:.4f})，正在保存模型...")
             os.makedirs('weights', exist_ok=True)
 
-            # 保存各個模組的權重
             torch.save(model.generator.state_dict(), 'weights/best_generator.pth')
             torch.save(model.recognizer.state_dict(), 'weights/best_recognizer.pth')
 
@@ -124,6 +123,6 @@ if __name__ == '__main__':
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
     args.mode = "stage1"
-    train()
+    train(\)
     args.mode = "stage2"
-    train()
+    train(args)

@@ -123,6 +123,6 @@ if __name__ == '__main__':
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
     args.mode = "stage1"
-    train(\)
+    train()
     args.mode = "stage2"
-    train(args)
+    train()

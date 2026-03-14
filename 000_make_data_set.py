@@ -1,7 +1,3 @@
-'''
-This file is copy from
-'''
-
 import os
 import glob
 import random

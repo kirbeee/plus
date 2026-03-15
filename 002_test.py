@@ -19,7 +19,7 @@ def load_backbone(args):
 
     gen_path = 'weights/best_generator.pth'
     rec_path = 'weights/best_recognizer.pth'
-    arcface_path = 'weights/best_arcface.pth'
+    arcface_path = 'weights/best_arcface_head.pth'
 
     if os.path.exists(gen_path) and os.path.exists(rec_path):
         model.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
@@ -69,11 +69,6 @@ def evaluate_with_classification(args, model, arcface_head, test_loader):
     return classification_acc
 
 def main():
-    args = configs.get_all_params()
-    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    args.datasets = "PLUSVein-FV3"
-    args = configs.get_dataset_params(args)
-
     results = {}
     print(f"\n--- 測試數據類型: LED ---")
     test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
@@ -87,4 +82,9 @@ def main():
 
 
 if __name__ == '__main__':
+    args = configs.get_all_params()
+    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    args.datasets = "PLUSVein-FV3"
+    args = configs.get_dataset_params(args)
+    args.mode = "stage2"
     main()

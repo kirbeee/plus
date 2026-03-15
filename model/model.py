@@ -133,7 +133,8 @@ class MinusLoss(nn.Module):
         super().__init__()
         self.mode = mode
         self.generative_loss = torch.nn.L1Loss()
-        self.recognition_loss = get_loss('DistCrossEntropy')
+        self.recognition_loss = torch.nn.CrossEntropyLoss()
+
 
         # by default, the sparsity loss is not used (weight set to 0)
         # it was a KL sparse loss designed to encourage the sparsity of generator's latents

@@ -9,25 +9,28 @@ import configs
 import datasets
 from model.model import MinusBackbone
 import matplotlib.pyplot as plt
+from torchkit.head.localfc.arcface import ArcFace
 
 
 def load_backbone(args):
-    """加載模型並載入 Stage 2 訓練後的權重"""
-    model = MinusBackbone(mode='stage2').to(args.device)
 
-    # 根據 001_train.py 的保存邏輯載入權重
+    model = MinusBackbone(mode=args.mode).to(args.device)
+    arcface_head = ArcFace(in_features=512, out_features=360).to(args.device)
+
     gen_path = 'weights/best_generator.pth'
     rec_path = 'weights/best_recognizer.pth'
+    arcface_path = 'weights/best_arcface.pth'
 
     if os.path.exists(gen_path) and os.path.exists(rec_path):
         model.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
         model.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
-        print("成功載入 Generator 與 Recognizer 權重")
+        arcface_head.load_state_dict(torch.load(arcface_path, map_location=args.device))
     else:
         raise("import model failed!")
 
     model.eval()
-    return model
+    arcface_head.eval()
+    return model, arcface_head
 
 
 def calculate_eer(labels, scores):
@@ -39,46 +42,31 @@ def calculate_eer(labels, scores):
     return eer, eer_threshold
 
 
-def evaluate(args, model, test_loader):
-    embeds_list = []
-    targets_list = []
+def evaluate_with_classification(args, model, arcface_head, test_loader):
+    correct = 0
+    total = 0
 
     with torch.no_grad():
         for imgs, labels in tqdm(test_loader):
-            imgs = imgs.to(args.device)
-            # 取得 stage 2 的混淆後殘差特徵
+            imgs, labels = imgs.to(args.device), labels.to(args.device)
+
+            # 1. 提取特徵
             _, _, x_feature, _ = model(imgs)
-            # 正規化特徵以進行 Cosine Similarity 計算
-            x_feature = F.normalize(x_feature, p=2, dim=1)
 
-            embeds_list.append(x_feature.cpu())
-            targets_list.append(labels.cpu())
+            # 2. 通過 ArcFace 獲取分類結果
+            # 測試時 label 不重要，傳入 dummy labels 即可
+            dummy_labels = torch.zeros(labels.size(0)).long().to(args.device)
+            outputs = arcface_head(x_feature, dummy_labels)
 
-    embeddings = torch.cat(embeds_list, dim=0)
-    targets = torch.cat(targets_list, dim=0)
+            # outputs[0] 通常是相似度分數 (logits)
+            predictions = torch.argmax(outputs[0], dim=1)
 
-    # 使用矩陣乘法快速計算 Cosine Similarity: (N, 512) @ (512, N) -> (N, N)
-    sim_matrix = torch.mm(embeddings, embeddings.t()).numpy()
+            # 3. 計算準確率
+            correct += (predictions == labels).sum().item()
+            total += labels.size(0)
 
-    # 建立標籤矩陣 (N, N), 1 表示身分相同，0 表示不同
-    targets_np = targets.numpy()
-    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
-
-    # 排除對角線（自己跟自己比）
-    mask = np.ones_like(sim_matrix, dtype=bool)
-    np.fill_diagonal(mask, 0)
-
-    scores = sim_matrix[mask]
-    actual_labels = label_matrix[mask]
-
-    eer, threshold = calculate_eer(actual_labels, scores)
-
-    # 計算特定閾值下的準確度
-    preds = (scores >= threshold).astype(int)
-    acc = skm.accuracy_score(actual_labels, preds)
-
-    return eer, acc
-
+    classification_acc = correct / total
+    return classification_acc
 
 def main():
     args = configs.get_all_params()
@@ -91,11 +79,11 @@ def main():
     test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
-    model = load_backbone(args)
-    eer, acc = evaluate(args, model, test_loader)
+    model, arc_face = load_backbone(args)
+    acc = evaluate_with_classification(args, model,arc_face, test_loader)
 
-    results["LED"] = {'EER': f"{eer * 100:.2f}%", 'ACC': f"{acc * 100:.2f}%"}
-    print(f"結果 [LED]: EER = {eer * 100:.2f}%, ACC = {acc * 100:.2f}%")
+    results["LED"] = {'ACC': f"{acc * 100:.2f}%"}
+    print(f"結果 [LED]: ACC = {acc * 100:.2f}%")
 
 
 if __name__ == '__main__':

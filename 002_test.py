@@ -12,7 +12,7 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 
 def load_backbone(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
-    arcface_head = ArcFace(in_features=512, out_features=360).to(args.device)
+    arcface_head = ArcFace(in_features=512, out_features=360, scale=32).to(args.device)
     gen_path = 'weights/best_generator.pth'
     rec_path = 'weights/best_recognizer.pth'
     arcface_path = 'weights/best_arcface_head.pth'
@@ -83,20 +83,20 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
 
             # 3. PSNR & SSIM 計算 (原始影像 vs 重建影像 x_encode)
             # 轉換為 Numpy 並調整維度為 (B, H, W, C)
-            orig_np = denormalize(imgs).transpose(0, 2, 3, 1)
-            recons_np = denormalize(x_encode).transpose(0, 2, 3, 1)
+            # orig_np = denormalize(imgs).transpose(0, 2, 3, 1)
+            # recons_np = denormalize(x_encode).transpose(0, 2, 3, 1)
 
-            for i in range(orig_np.shape[0]):
-                p = psnr(orig_np[i], recons_np[i], data_range=1.0)
-                s = ssim(orig_np[i], recons_np[i], data_range=1.0, multichannel=True)
-                all_psnr.append(p)
-                all_ssim.append(s)
+            # for i in range(orig_np.shape[0]):
+            #     p = psnr(orig_np[i], recons_np[i], data_range=1.0)
+            #     s = ssim(orig_np[i], recons_np[i], data_range=1.0, multichannel=True)
+            #     all_psnr.append(p)
+            #     all_ssim.append(s)
 
     metrics = {
         'ACC': correct / total,
-        'EER': 0,
-        'PSNR': np.mean(all_psnr),
-        'SSIM': np.mean(all_ssim)
+        # 'EER': 0,
+        # 'PSNR': np.mean(all_psnr),
+        # 'SSIM': np.mean(all_ssim)
     }
     return metrics
 
@@ -110,8 +110,8 @@ def main():
 
     print(f"\n================測試結果================")
     print(f"ACC: {res['ACC'] * 100:.2f}%")
-    print(f"PSNR: {res['PSNR']:.4f} dB")
-    print(f"SSIM: {res['SSIM']:.4f}")
+    # print(f"PSNR: {res['PSNR']:.4f} dB")
+    # print(f"SSIM: {res['SSIM']:.4f}")
     print(f"=========================================")
 
 if __name__ == '__main__':

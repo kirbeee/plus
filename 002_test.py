@@ -39,6 +39,8 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
     total = 0
     all_psnr = []
     all_ssim = []
+    all_labels = []
+    all_scores = []
 
     with torch.no_grad():
         # make data to batch img*32 , label *32
@@ -60,13 +62,23 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
 
             # for i in range(orig_np.shape[0]):
             #     p = psnr(orig_np[i], recons_np[i], data_range=1.0)
-            #     s = ssim(orig_np[i], recons_np[i], data_range=1.0, multichannel=True)
+            #     s = ssim(orig_np[i], recons_np[i], data_range=1.0)
             #     all_psnr.append(p)
             #     all_ssim.append(s)
 
-    all_labels =[]
-    all_scores = []
-    eer_val, _ = calculate_eer(np.array(all_labels), np.array(all_scores))
+
+            # --- EER 資料收集 ---
+            logits = outputs[0]
+            # 2. 將真實標籤存起來
+            all_labels.extend(labels.cpu().numpy())
+
+            # 3. 獲取分數。假設我們要看 class 1 的 EER，需先做 softmax 轉為機率
+            probs = torch.softmax(logits, dim=1)
+            scores_for_eer = probs[:, 1]  # 取出所有樣本屬於 class 1 的機率
+            all_scores.extend(scores_for_eer.cpu().numpy())
+
+            # 現在 all_labels 和 all_scores 有資料了，不會報錯
+        eer_val, _ = calculate_eer(np.array(all_labels), np.array(all_scores))
 
     metrics = {
         'ACC': correct / total,

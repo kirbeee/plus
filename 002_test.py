@@ -34,33 +34,6 @@ def calculate_eer(labels, scores):
     eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
     return eer, eer_threshold
 
-def evaluate_with_classification(args, model, arcface_head, test_loader):
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for imgs, labels in tqdm(test_loader):
-            imgs, labels = imgs.to(args.device), labels.to(args.device)
-
-            # 1. 提取特徵
-            _, _, x_feature, _ = model(imgs)
-
-            # 2. 通過 ArcFace 獲取分類結果
-            # 測試時 label 不重要，傳入 dummy labels 即可
-            dummy_labels = torch.zeros(labels.size(0)).long().to(args.device)
-            outputs = arcface_head(x_feature, dummy_labels)
-
-            # outputs[0] 通常是相似度分數 (logits)
-            predictions = torch.argmax(outputs[0], dim=1)
-
-            # 3. 計算準確率
-            correct += (predictions == labels).sum().item()
-            total += labels.size(0)
-
-    classification_acc = correct / total
-    return classification_acc
-
-
 def evaluate_metrics(args, model, arcface_head, test_loader):
     correct = 0
     total = 0
@@ -68,13 +41,12 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
     all_ssim = []
 
     with torch.no_grad():
+        # make data to batch img*32 , label *32
         for imgs, labels in tqdm(test_loader, desc="Testing"):
             imgs, labels = imgs.to(args.device), labels.to(args.device)
 
-            # 1. 提取特徵與重建影像
+            # Calculate Acc
             x_encode, _, x_feature, _ = model(imgs)
-
-            # 2. 分類準確度計算
             dummy_labels = torch.zeros(labels.size(0)).long().to(args.device)
             outputs = arcface_head(x_feature, dummy_labels)
             predictions = torch.argmax(outputs[0], dim=1)
@@ -92,9 +64,13 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
             #     all_psnr.append(p)
             #     all_ssim.append(s)
 
+    all_labels =[]
+    all_scores = []
+    eer_val, _ = calculate_eer(np.array(all_labels), np.array(all_scores))
+
     metrics = {
         'ACC': correct / total,
-        # 'EER': 0,
+        'EER': eer_val,
         # 'PSNR': np.mean(all_psnr),
         # 'SSIM': np.mean(all_ssim)
     }

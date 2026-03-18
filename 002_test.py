@@ -71,7 +71,7 @@ def eer(args, model, test_loader):
     preds = (scores >= threshold).astype(int)
     acc = skm.accuracy_score(actual_labels, preds)
 
-    return eer, acc
+    return eer
 
 def evaluate_metrics(args, model, arcface_head, test_loader):
     correct = 0
@@ -125,6 +125,7 @@ def main():
 
     print(f"\n================測試結果================")
     print(f"ACC: {res['ACC'] * 100:.2f}%")
+    print(f"EER: {res['EER']}")
     # print(f"PSNR: {res['PSNR']:.4f} dB")
     # print(f"SSIM: {res['SSIM']:.4f}")
     print(f"=========================================")

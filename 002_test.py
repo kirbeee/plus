@@ -9,6 +9,7 @@ from model.model import MinusBackbone
 from torchkit.head.localfc.arcface import ArcFace
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
+import torch.nn.functional as F
 
 def load_backbone(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
@@ -33,6 +34,44 @@ def calculate_eer(labels, scores):
     eer_threshold = thresholds[np.nanargmin(np.absolute((fnr - fpr)))]
     eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
     return eer, eer_threshold
+
+def eer(args, model, test_loader):
+    embeds_list = []
+    targets_list = []
+
+    with torch.no_grad():
+        for imgs, labels in tqdm(test_loader):
+            imgs = imgs.to(args.device)
+            _, _, x_feature, _ = model(imgs)
+            x_feature = F.normalize(x_feature, p=2, dim=1)
+
+            embeds_list.append(x_feature.cpu())
+            targets_list.append(labels.cpu())
+
+    embeddings = torch.cat(embeds_list, dim=0)
+    targets = torch.cat(targets_list, dim=0)
+
+    # 使用矩陣乘法快速計算 Cosine Similarity: (N, 512) @ (512, N) -> (N, N)
+    sim_matrix = torch.mm(embeddings, embeddings.t()).numpy()
+
+    # 建立標籤矩陣 (N, N), 1 表示身分相同，0 表示不同
+    targets_np = targets.numpy()
+    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
+
+    # 排除對角線（自己跟自己比）
+    mask = np.ones_like(sim_matrix, dtype=bool)
+    np.fill_diagonal(mask, 0)
+
+    scores = sim_matrix[mask]
+    actual_labels = label_matrix[mask]
+
+    eer, threshold = calculate_eer(actual_labels, scores)
+
+    # 計算特定閾值下的準確度
+    preds = (scores >= threshold).astype(int)
+    acc = skm.accuracy_score(actual_labels, preds)
+
+    return eer, acc
 
 def evaluate_metrics(args, model, arcface_head, test_loader):
     correct = 0
@@ -67,22 +106,10 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
             #     all_ssim.append(s)
 
 
-            # --- EER 資料收集 ---
-            logits = outputs[0]
-            # 2. 將真實標籤存起來
-            all_labels.extend(labels.cpu().numpy())
-
-            # 3. 獲取分數。假設我們要看 class 1 的 EER，需先做 softmax 轉為機率
-            probs = torch.softmax(logits, dim=1)
-            scores_for_eer = probs[:, 1]  # 取出所有樣本屬於 class 1 的機率
-            all_scores.extend(scores_for_eer.cpu().numpy())
-
-            # 現在 all_labels 和 all_scores 有資料了，不會報錯
-        eer_val, _ = calculate_eer(np.array(all_labels), np.array(all_scores))
 
     metrics = {
         'ACC': correct / total,
-        'EER': eer_val,
+        'EER': eer(args, model, test_loader),
         # 'PSNR': np.mean(all_psnr),
         # 'SSIM': np.mean(all_ssim)
     }

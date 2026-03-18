@@ -75,7 +75,8 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
             x_encode, _, x_feature, _ = model(imgs)
 
             # 2. 分類準確度計算
-            outputs = arcface_head(x_feature, labels)
+            dummy_labels = torch.zeros(labels.size(0)).long().to(args.device)
+            outputs = arcface_head(x_feature, dummy_labels)
             predictions = torch.argmax(outputs[0], dim=1)
             correct += (predictions == labels).sum().item()
             total += labels.size(0)

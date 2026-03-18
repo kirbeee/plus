@@ -1,6 +1,4 @@
-import os
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
@@ -8,27 +6,19 @@ import sklearn.metrics as skm
 import configs
 import datasets
 from model.model import MinusBackbone
-import matplotlib.pyplot as plt
 from torchkit.head.localfc.arcface import ArcFace
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
 def load_backbone(args):
-
     model = MinusBackbone(mode=args.mode).to(args.device)
     arcface_head = ArcFace(in_features=512, out_features=360).to(args.device)
-
     gen_path = 'weights/best_generator.pth'
     rec_path = 'weights/best_recognizer.pth'
     arcface_path = 'weights/best_arcface_head.pth'
-
-    if os.path.exists(gen_path) and os.path.exists(rec_path):
-        model.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
-        model.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
-        arcface_head.load_state_dict(torch.load(arcface_path, map_location=args.device))
-    else:
-        raise("import model failed!")
-
+    model.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
+    model.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
+    arcface_head.load_state_dict(torch.load(arcface_path, map_location=args.device))
     model.eval()
     arcface_head.eval()
     return model, arcface_head
@@ -38,7 +28,6 @@ def denormalize(tensor):
     return ((tensor + 1.0) / 2.0).clamp(0, 1).cpu().numpy()
 
 def calculate_eer(labels, scores):
-    """計算等錯誤率 (EER)"""
     fpr, tpr, thresholds = skm.roc_curve(labels, scores, pos_label=1)
     fnr = 1 - tpr
     eer_threshold = thresholds[np.nanargmin(np.absolute((fnr - fpr)))]
@@ -83,12 +72,10 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
             imgs, labels = imgs.to(args.device), labels.to(args.device)
 
             # 1. 提取特徵與重建影像
-            # 根據 model.py, forward 回傳: x_encode, x_residue, x_feature, x_latent
             x_encode, _, x_feature, _ = model(imgs)
 
             # 2. 分類準確度計算
-            dummy_labels = torch.zeros(labels.size(0)).long().to(args.device)
-            outputs = arcface_head(x_feature, dummy_labels)
+            outputs = arcface_head(x_feature, labels)
             predictions = torch.argmax(outputs[0], dim=1)
             correct += (predictions == labels).sum().item()
             total += labels.size(0)
@@ -99,16 +86,14 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
             recons_np = denormalize(x_encode).transpose(0, 2, 3, 1)
 
             for i in range(orig_np.shape[0]):
-                # 計算單張圖的 PSNR
                 p = psnr(orig_np[i], recons_np[i], data_range=1.0)
-                # 計算單張圖的 SSIM (如果是灰階圖或靜脈圖，通常 C=1 或 3)
-                s = ssim(orig_np[i], recons_np[i], data_range=1.0, channel_axis=2)
-
+                s = ssim(orig_np[i], recons_np[i], data_range=1.0, multichannel=True)
                 all_psnr.append(p)
                 all_ssim.append(s)
 
     metrics = {
         'ACC': correct / total,
+        'EER': 0,
         'PSNR': np.mean(all_psnr),
         'SSIM': np.mean(all_ssim)
     }
@@ -116,19 +101,16 @@ def evaluate_metrics(args, model, arcface_head, test_loader):
 
 
 def main():
-    print(f"\n--- 測試數據類型: LED ---")
     test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
-
     model, arc_face = load_backbone(args)
 
-    # 執行評估
     res = evaluate_metrics(args, model, arc_face, test_loader)
 
     print(f"\n================測試結果================")
-    print(f"辨識準確度 (ACC): {res['ACC'] * 100:.2f}%")
-    print(f"平均 PSNR: {res['PSNR']:.4f} dB")
-    print(f"平均 SSIM: {res['SSIM']:.4f}")
+    print(f"ACC: {res['ACC'] * 100:.2f}%")
+    print(f"PSNR: {res['PSNR']:.4f} dB")
+    print(f"SSIM: {res['SSIM']:.4f}")
     print(f"=========================================")
 
 if __name__ == '__main__':

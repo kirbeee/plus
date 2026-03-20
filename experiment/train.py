@@ -32,30 +32,32 @@ def tensor_to_np(tensor, is_residue=False):
     return img
 
 def visualize_stages():
+    gen_path = '../weights/best_generator.pth'
+    rec_path = '../weights/best_recognizer.pth'
+
     # 2. 載入單一影像樣本
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     img_tensor, label = train_dataset[0]
-    img_tensor = img_tensor.unsqueeze(0).to(device) # 增加 Batch 維度
+    img_tensor = img_tensor.unsqueeze(0).to(args.device) # 增加 Batch 維度
 
     # 3. 模擬 Stage 1 流程
-    model_s1 = MinusBackbone(mode='stage1').to(device)
-    model_s1.generator.load_state_dict(torch.load('../weights/best_generator.pth'))
-    model_s1.recognizer.load_state_dict(torch.load('../weights/best_recognizer.pth'))
+    model_s1 = MinusBackbone(mode='stage1').to(args.device)
+    model_s1.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
     model_s1.eval()
 
     with torch.no_grad():
         x_encode_s1, x_residue_s1, _, _ = model_s1(img_tensor)
 
     # 4. 模擬 Stage 2 流程 (包含 Shuffle)
-    model_s2 = MinusBackbone(mode='stage2').to(device)
-    model_s2.generator.load_state_dict(torch.load('../weights/best_generator.pth'))
-    model_s2.recognizer.load_state_dict(torch.load('../weights/best_recognizer.pth'))
+    model_s2 = MinusBackbone(mode='stage2').to(args.device)
+    model_s2.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
+    model_s2.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
     model_s2.eval()
     with torch.no_grad():
         x_encode_s2, x_residue_s2, _, _ = model_s2(img_tensor)
 
     # 5. 使用 Matplotlib 繪圖
-    fig, axes = plt.subplots(1, 4)
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     print(img_tensor.size())
     axes[0].imshow(tensor_to_np(img_tensor))
     axes[0].set_title("Original Image (Input)")
@@ -79,5 +81,4 @@ if __name__ == '__main__':
     args = configs.get_all_params()
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     visualize_stages()

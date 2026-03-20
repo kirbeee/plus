@@ -11,7 +11,7 @@ from model.model import MinusBackbone, MinusLoss
 def train():
     # --- hyperparameter ---
     configs.setup_seed(args.seed)
-    epochs = 25
+
     # --- data loading ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, persistent_workers=True, pin_memory=True, drop_last=True )
@@ -101,7 +101,9 @@ if __name__ == '__main__':
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
+    epochs = 25
     args.mode = "stage1"
     train()
+    epochs = 30
     args.mode = "stage2"
     train()

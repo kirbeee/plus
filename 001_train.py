@@ -39,7 +39,7 @@ def train():
 
     optimizer = optim.AdamW([
         {'params': model.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
-        {'params': arcface_head.parameters(), 'lr':0.1, 'weight_decay': args.weight_decay}
+        {'params': arcface_head.parameters(), 'lr':args.lr, 'weight_decay': args.weight_decay}
     ])
 
     criterion = MinusLoss(mode=args.mode).to(args.device)

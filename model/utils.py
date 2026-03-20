@@ -127,15 +127,15 @@ def dct_transform(x, chs_remove=None, chs_pad=False,
     x = dct.to_ycbcr(x)
     x = x - 128
 
-    # 3. 執行 Block DCT (修正 view 邏輯)
+    # perform block discrete cosine transform (BDCT)
     b, c, h, w = x.shape
-    h_block, w_block = h // stride, w // stride
+    n_block = h // stride
     x = x.view(b * c, 1, h, w)
     x = F.unfold(x, kernel_size=(size, size), dilation=dilation, padding=pad, stride=(stride, stride))
     x = x.transpose(1, 2)
     x = x.view(b, c, -1, size, size)
     x_freq = dct.block_dct(x)
-    x_freq = x_freq.view(b, c, h_block, w_block, size * size).permute(0, 1, 4, 2, 3)
+    x_freq = x_freq.view(b, c, n_block, n_block, size * size).permute(0, 1, 4, 2, 3)
 
     # prune channels
     if chs_remove is not None:
@@ -147,39 +147,33 @@ def dct_transform(x, chs_remove=None, chs_pad=False,
             # pad removed channels with zero, helpful for visualization
             x_freq[:, :, channels] = 0
 
-    # 5. 堆疊 Y, Cb, Cr 頻道 -> (B, 192, H_block, W_block)
-    x_freq = x_freq.reshape(b, -1, h_block, w_block)
+    # stack frequency channels from each color domain
+    x_freq = x_freq.reshape(b, -1, n_block, n_block)
 
     return x_freq
 
 
 def idct_transform(x, size=8, stride=8, pad=0, dilation=1, ratio=8):
     """
-        將 192 通道的頻域數據還原為空間域影像
+        The inverse of DCT transform.
+        Transform frequency channels (must be 192 channels, can be padded with 0) back to the spatial image.
     """
-    b, ch_total, h_freq, w_freq = x.shape
 
-    # 1. 還原為區塊格式 (B, 3, 64, H_f, W_f)
-    x = x.view(b, 3, 64, h_freq, w_freq)
-    x = x.permute(0, 1, 3, 4, 2)  # -> (B, 3, H_f, W_f, 64)
-    x = x.view(b, 3, h_freq * w_freq, 8, 8)
+    b, _, h, w = x.shape
 
-    # 2. 執行 Block IDCT
-    x_spatial = dct.block_idct(x)
-
-    # 3. 重新拼湊像素塊 (修正 view 與 permute)
-    x_spatial = x_spatial.view(b, 3, h_freq, w_freq, 8, 8)
-    x_spatial = x_spatial.permute(0, 1, 2, 4, 3, 5).contiguous()
-    x_spatial = x_spatial.view(b, 3, h_freq * 8, w_freq * 8)
-
-    # 4. 色彩空間還原 (YCbCr -> RGB)
-    x_spatial = x_spatial + 128
-    x_spatial = dct.to_rgb(x_spatial)
-    x_spatial = x_spatial / 255.0
-
-    # 5. 縮小回原始比例 (如果當初有放大)
-    if ratio != 1:
-        x_spatial = F.interpolate(x_spatial, scale_factor=1 / ratio, mode='bilinear', align_corners=True)
-
-    return x_spatial
+    x = x.view(b, 3, 64, h, w)
+    x = x.permute(0, 1, 3, 4, 2)
+    x = x.view(b, 3, h * w, 8, 8)
+    x = dct.block_idct(x)
+    x = x.view(b * 3, h * w, 64)
+    x = x.transpose(1, 2)
+    x = F.fold(x, output_size=(112 * ratio, 112 * ratio),
+               kernel_size=(size, size), dilation=dilation, padding=pad, stride=(stride, stride))
+    x = x.view(b, 3, 112 * ratio, 112 * ratio)
+    x = x + 128
+    x = dct.to_rgb(x)
+    x = x / 255
+    x = F.interpolate(x, scale_factor=1 / ratio, mode='bilinear', align_corners=True)
+    x = x.clamp(min=0.0, max=1.0)
+    return x
 

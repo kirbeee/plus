@@ -38,6 +38,7 @@ def visualize_stages():
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     img_tensor, label = train_dataset[0]
     img_tensor = img_tensor.unsqueeze(0).to(args.device) # 增加 Batch 維度
+    print(img_tensor.shape)
 
     # 3. 模擬 Stage 1 流程
     model_s1 = MinusBackbone(mode='stage1').to(args.device)
@@ -57,7 +58,7 @@ def visualize_stages():
 
     # 5. 使用 Matplotlib 繪圖
     fig, axes = plt.subplots(1, 6, figsize=(16, 4))
-    print(img_tensor.size(),x_encode_s1.size(),x_residue_s1.size(),x_encode_s2.size(),x_residue_s2.size())
+    # print(img_tensor.size(),x_encode_s1.size(),x_residue_s1.size(),x_encode_s2.size(),x_residue_s2.size())
     axes[0].imshow(tensor_to_np(img_tensor))
     axes[0].set_title("Original Image (Input)")
 

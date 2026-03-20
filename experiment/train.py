@@ -20,12 +20,12 @@ def tensor_to_np(tensor, is_residue=False):
     img = np.transpose(img, (1, 2, 0))
 
     if is_residue:
-        # 對於殘差，因為範圍是 [-1, 1]，我們用固定的反正規化，而不是 min-max stretch
-        # 這樣才能真實反映出它跟原圖相比有多 "暗"
-        img = img / 2.0
+        gain = 5.0
+        img = img * gain
+        img = np.abs((img / 2.0) - 1.0)
         img = np.clip(img, 0, 1)
     else:
-        img = (img + 1.0) / 2.0
+        img = ((img - 1.0) / 2.0)* -1
         img = np.clip(img, 0, 1)
 
     return img

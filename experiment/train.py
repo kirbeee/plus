@@ -10,24 +10,25 @@ from model.model import MinusBackbone
 
 
 def tensor_to_np(tensor, is_residue=False):
-    """將 Tensor 轉換為可顯示的 Numpy 影像 [0, 1]"""
-    img = tensor.detach().cpu().numpy()[0]
+    # 1. 移除 Batch 維度 (1, 3, 112, 112) -> (3, 112, 112)
+    img = tensor.squeeze(0)
 
-    # 取前三個通道 (如果 n_duplicate > 1，shuffle 後可能會有更多通道)
-    if img.shape[0] >= 3:
-        img = img[:3]
+    # 將 Tensor 轉換為可顯示的 Numpy 影像 [0, 1]
+    img = img.detach().cpu().numpy()
 
     # 轉置為 (H, W, C)
     img = np.transpose(img, (1, 2, 0))
 
-    if is_residue:
-        # 對於殘差，因為範圍是 [-1, 1]，我們用固定的反正規化，而不是 min-max stretch
-        # 這樣才能真實反映出它跟原圖相比有多 "暗"
-        img = (img + 1.0) / 2.0
-        img = np.clip(img, 0, 1)
-    else:
-        # 一般圖片的反正規化 (或者你原本的寫法也可以)
-        img = (img - img.min()) / (img.max() - img.min() + 1e-8)
+    img = (img + 1.0) / 2.0
+    img = np.clip(img, 0, 1)
+    # if is_residue:
+    #     # 對於殘差，因為範圍是 [-1, 1]，我們用固定的反正規化，而不是 min-max stretch
+    #     # 這樣才能真實反映出它跟原圖相比有多 "暗"
+    #     img = (img + 1.0) / 2.0
+    #     img = np.clip(img, 0, 1)
+    # else:
+    #     # 一般圖片的反正規化 (或者你原本的寫法也可以)
+    #     img = (img - img.min()) / (img.max() - img.min() + 1e-8)
 
     return img
 
@@ -57,8 +58,8 @@ def visualize_stages():
         x_encode_s2, x_residue_s2, _, _ = model_s2(img_tensor)
 
     # 5. 使用 Matplotlib 繪圖
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-    print(img_tensor.size())
+    fig, axes = plt.subplots(1, 6, figsize=(16, 4))
+    print(img_tensor.size(),x_encode_s1.size(),x_residue_s1.size(),x_encode_s2.size(),x_residue_s2.size())
     axes[0].imshow(tensor_to_np(img_tensor))
     axes[0].set_title("Original Image (Input)")
 
@@ -68,8 +69,14 @@ def visualize_stages():
     axes[2].imshow(tensor_to_np(x_residue_s1))
     axes[2].set_title("Stage 1: Residue (Features)")
 
-    axes[3].imshow(tensor_to_np(x_residue_s2))
+    axes[3].imshow(tensor_to_np(x_residue_s2,is_residue=True))
     axes[3].set_title("Stage 2: Shuffled (Privacy)")
+
+    axes[4].imshow(tensor_to_np(torch.zeros(1, 3, 112, 112),is_residue=True))
+    axes[4].set_title("tensor with all zero")
+
+    axes[5].imshow(tensor_to_np(torch.full((1, 3, 112, 112), -1.0)))
+    axes[5].set_title("tensor with all -1")
 
     for ax in axes:
         ax.axis('off')

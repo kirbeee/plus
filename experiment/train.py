@@ -19,16 +19,14 @@ def tensor_to_np(tensor, is_residue=False):
     # 轉置為 (H, W, C)
     img = np.transpose(img, (1, 2, 0))
 
-    img = (img + 1.0) / 2.0
-    img = np.clip(img, 0, 1)
-    # if is_residue:
-    #     # 對於殘差，因為範圍是 [-1, 1]，我們用固定的反正規化，而不是 min-max stretch
-    #     # 這樣才能真實反映出它跟原圖相比有多 "暗"
-    #     img = (img + 1.0) / 2.0
-    #     img = np.clip(img, 0, 1)
-    # else:
-    #     # 一般圖片的反正規化 (或者你原本的寫法也可以)
-    #     img = (img - img.min()) / (img.max() - img.min() + 1e-8)
+    if is_residue:
+        # 對於殘差，因為範圍是 [-1, 1]，我們用固定的反正規化，而不是 min-max stretch
+        # 這樣才能真實反映出它跟原圖相比有多 "暗"
+        img = img / 2.0
+        img = np.clip(img, 0, 1)
+    else:
+        img = (img + 1.0) / 2.0
+        img = np.clip(img, 0, 1)
 
     return img
 
@@ -66,13 +64,13 @@ def visualize_stages():
     axes[1].imshow(tensor_to_np(x_encode_s1))
     axes[1].set_title("Stage 1: Reconstructed (x_encode)")
 
-    axes[2].imshow(tensor_to_np(x_residue_s1))
+    axes[2].imshow(tensor_to_np(x_residue_s1,is_residue=True))
     axes[2].set_title("Stage 1: Residue (Features)")
 
     axes[3].imshow(tensor_to_np(x_residue_s2,is_residue=True))
     axes[3].set_title("Stage 2: Shuffled (Privacy)")
 
-    axes[4].imshow(tensor_to_np(torch.zeros(1, 3, 112, 112),is_residue=True))
+    axes[4].imshow(tensor_to_np(torch.zeros(1, 3, 112, 112)))
     axes[4].set_title("tensor with all zero")
 
     axes[5].imshow(tensor_to_np(torch.full((1, 3, 112, 112), -1.0)))

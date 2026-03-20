@@ -150,6 +150,10 @@ def dct_transform(x, chs_remove=None, chs_pad=False,
     # stack frequency channels from each color domain
     x_freq = x_freq.reshape(b, -1, n_block, n_block)
 
+    # 【新增】將 DCT 係數正規化 (除以 255 或 100 都可以，這裡以 255 為例)
+    # 這樣會讓特徵數值回到接近 UNet 好初始化的範圍
+    x_freq = x_freq / 255.0
+
     return x_freq
 
 
@@ -158,6 +162,9 @@ def idct_transform(x, size=8, stride=8, pad=0, dilation=1, ratio=8):
         The inverse of DCT transform.
         Transform frequency channels (must be 192 channels, can be padded with 0) back to the spatial image.
     """
+
+    # 【新增】還原 DCT 係數的尺度
+    x = x * 255.0
 
     b, _, h, w = x.shape
 

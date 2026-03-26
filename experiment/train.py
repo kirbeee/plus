@@ -12,13 +12,10 @@ from model.model import MinusBackbone
 def tensor_to_np(tensor, is_residue=False):
     # 1. 移除 Batch 維度 (1, 3, 112, 112) -> (3, 112, 112)
     img = tensor.squeeze(0)
-
     # 將 Tensor 轉換為可顯示的 Numpy 影像 [0, 1]
     img = img.detach().cpu().numpy()
-
     # 轉置為 (H, W, C)
     img = np.transpose(img, (1, 2, 0))
-
     if is_residue:
         gain = 5.0
         img = img * gain

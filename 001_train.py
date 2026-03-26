@@ -89,7 +89,7 @@ def train():
         avg_loss = total_loss / len(train_loader)
         if avg_loss < best_loss:
             best_loss = avg_loss
-            print(f"--> 發現更低的 Loss ({best_loss:.4f})，正在保存模型...")
+            print(f"--> find new Loss ({best_loss:.4f}) Saving...")
             os.makedirs('weights', exist_ok=True)
             torch.save(arcface_head.state_dict(), 'weights/best_arcface_head.pth')
             torch.save(model.generator.state_dict(), 'weights/best_generator.pth')

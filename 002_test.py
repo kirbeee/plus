@@ -9,6 +9,8 @@ from model.model import MinusBackbone
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import torch.nn.functional as F
+import test_tool.attacker as attacker
+from model.utils import UNet
 
 def load_backbone(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
@@ -28,7 +30,7 @@ def eer_calculation(args, model, test_loader):
     targets_list = []
 
     with torch.no_grad():
-        for imgs, labels in tqdm(test_loader):
+        for imgs, labels in tqdm(test_loader,desc="EER Calculation"):
             imgs = imgs.to(args.device)
             _, _, x_feature, _ = model(imgs)
             x_feature = F.normalize(x_feature, p=2, dim=1)
@@ -65,35 +67,37 @@ def eer_calculation(args, model, test_loader):
     return acc, eer
 
 def psnr_ssim_calculation(args, model, test_loader):
-    all_psnr = []
-    all_ssim = []
+    # ==========================================
+    # 攻擊者還原測試流程
+    # ==========================================
+    attacker_weight_path = 'weights/attacker_unet.pth'
+    attacker_model = UNet(in_channels=3, out_channels=3).to(args.device)
 
-    with torch.no_grad():
-        # make data to batch img*32 , label *32
-        for imgs, labels in tqdm(test_loader, desc="Testing"):
-            imgs, labels = imgs.to(args.device), labels.to(args.device)
-            # PSNR & SSIM 計算 (原始影像 vs 重建影像 x_encode)
-            # 轉換為 Numpy 並調整維度為 (B, H, W, C)
-            _, x_residue, _, _ = model(imgs)
-            orig_np = denormalize(imgs).transpose(0, 2, 3, 1)
-            recons_np = denormalize(x_residue).transpose(0, 2, 3, 1)
+    # 檢查是否已有訓練好的攻擊者模型
+    import os
+    if os.path.exists(attacker_weight_path):
+        print("\n[提示] 找到已訓練的攻擊者模型，開始載入並評估還原效果...")
+        attacker_model.load_state_dict(torch.load(attacker_weight_path, map_location=args.device))
+    else:
+        print("\n[提示] 找不到訓練好的攻擊者模型，開始進行訓練...")
+        # 需載入訓練資料集來訓練攻擊者
+        train_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='train')
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers)
 
-            for i in range(orig_np.shape[0]):
-                p = psnr(orig_np[i], recons_np[i], data_range=1.0)
-                s = ssim(orig_np[i], recons_np[i], data_range=1.0, channel_axis=-1)
-                all_psnr.append(p)
-                all_ssim.append(s)
-    return {
-        'PSNR': np.mean(all_psnr),
-        'SSIM': np.mean(all_ssim)
-    }
+        # 呼叫 attacker.py 中的訓練函式
+        attacker_model = attacker.train_attacker(args, model, train_loader, epochs=10, save_path=attacker_weight_path)
+
+    # 呼叫 attacker.py 中的評估函式
+    att_psnr, att_ssim = attacker.attack_evaluation(args, model, attacker_model, test_loader)
+
+    return {'Attack_PSNR': att_psnr, 'Attack_SSIM': att_ssim}
 
 def print_results(res):
     print(f"\n================Test Result================")
     print(f"ACC: {res['AAC']}%")
     print(f"EER: {res['EER']}")
-    print(f"PSNR: {res['PSNR']:.4f} dB")
-    print(f"SSIM: {res['SSIM']:.4f}")
+    print(f"Attacker Recovered PSNR: {res['Attack_PSNR']:.4f} dB")
+    print(f"Attacker Recovered SSIM: {res['Attack_SSIM']:.4f}")
     print(f"=========================================")
 
 def main():

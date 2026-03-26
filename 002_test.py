@@ -54,7 +54,7 @@ def eer_calculation(args, model, test_loader):
     scores = sim_matrix[mask]
     actual_labels = label_matrix[mask]
 
-    fpr, tpr, thresholds = skm.roc_curve(labels, scores, pos_label=1)
+    fpr, tpr, thresholds = skm.roc_curve(actual_labels, scores, pos_label=1)
     fnr = 1 - tpr
     threshold = thresholds[np.nanargmin(np.absolute((fnr - fpr)))]
     eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
@@ -81,7 +81,7 @@ def psnr_ssim_calculation(args, model, test_loader):
 
             for i in range(orig_np.shape[0]):
                 p = psnr(orig_np[i], recons_np[i], data_range=1.0)
-                s = ssim(orig_np[i], recons_np[i], data_range=1.0)
+                s = ssim(orig_np[i], recons_np[i], data_range=1.0, channel_axis=-1)
                 all_psnr.append(p)
                 all_ssim.append(s)
     return {
@@ -91,7 +91,7 @@ def psnr_ssim_calculation(args, model, test_loader):
 
 def print_results(res):
     print(f"\n================Test Result================")
-    print(f"ACC: {res["ACC"]}%")
+    print(f"ACC: {res['AAC']}%")
     print(f"EER: {res['EER']}")
     print(f"PSNR: {res['PSNR']:.4f} dB")
     print(f"SSIM: {res['SSIM']:.4f}")
@@ -103,7 +103,7 @@ def main():
     model = load_backbone(args)
     result = psnr_ssim_calculation(args, model, test_loader)
     aac,eer_number = eer_calculation(args, model, test_loader)
-    result['ACC'] = aac
+    result['AAC'] = aac
     result['EER'] = eer_number
     print_results(result)
     return None

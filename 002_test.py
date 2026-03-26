@@ -6,7 +6,6 @@ import sklearn.metrics as skm
 import configs
 import datasets
 from model.model import MinusBackbone
-from torchkit.head.localfc.arcface import ArcFace
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import torch.nn.functional as F
@@ -75,9 +74,9 @@ def psnr_ssim_calculation(args, model, test_loader):
             imgs, labels = imgs.to(args.device), labels.to(args.device)
             # PSNR & SSIM 計算 (原始影像 vs 重建影像 x_encode)
             # 轉換為 Numpy 並調整維度為 (B, H, W, C)
-            x_encode, _, x_feature, _ = model(imgs)
+            _, x_residue, _, _ = model(imgs)
             orig_np = denormalize(imgs).transpose(0, 2, 3, 1)
-            recons_np = denormalize(x_encode).transpose(0, 2, 3, 1)
+            recons_np = denormalize(x_residue).transpose(0, 2, 3, 1)
 
             for i in range(orig_np.shape[0]):
                 p = psnr(orig_np[i], recons_np[i], data_range=1.0)

@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import sys
 # 引入專案的模組
+from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import configs
 import datasets
@@ -14,7 +15,7 @@ from model.utils import UNet
 from test_tool.attacker import denormalize
 
 
-def load_models_for_vis(args, weights_dir='weights'):
+def load_models_for_vis(args, weights_dir='../weights'):
     """載入 PPFR 模型 (Stage 2) 與 攻擊者模型用於視覺化"""
     print("正在載入模型權重進行視覺化展示...")
 
@@ -95,7 +96,7 @@ def save_comparison_plot(args, model, attacker_model, test_loader, save_dir='vis
                 # 3. 攻擊者重建圖
                 # 這是你要求的：攻擊者重建的那一張
                 axes[2].imshow(recons_np[i])
-                axes[2].set_title(f'Attacker Recovered ($\hat{X}$)\nfrom $X_p$ using U-Net')
+                axes[2].set_title('Attacker Recovered ($\\hat{X}$)\nfrom $X_p$ using U-Net')
                 axes[2].axis('off')
 
                 # 儲存圖片

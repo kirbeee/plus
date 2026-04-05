@@ -53,9 +53,7 @@ def visualize_stages():
     with torch.no_grad():
         x_encode_s2, x_residue_s2, _, _ = model_s2(img_tensor)
 
-    # 5. 使用 Matplotlib 繪圖
     fig, axes = plt.subplots(1, 6, figsize=(16, 4))
-    # print(img_tensor.size(),x_encode_s1.size(),x_residue_s1.size(),x_encode_s2.size(),x_residue_s2.size())
     axes[0].imshow(tensor_to_np(img_tensor))
     axes[0].set_title("Original Image (Input)")
 

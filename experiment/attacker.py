@@ -60,23 +60,24 @@ def comparison_plot(args, model, attacker_model, test_loader):
             fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
             # 1. 原始 RGB 靜脈圖
-            axes[0].imshow(orig_np[B[0]])
+            axes[0].imshow(orig_np[0])
             axes[0].set_title(f'Sample {count + 1}\nOriginal Vein (RGB)')
             axes[0].axis('off')
 
             # 2. 攔截到的保護影像 (Stage 2 Residue Shuffled)
             # 這是你要求的：Shuffle 過的那一張
-            axes[1].imshow(shuffled_np[B[0]])
+            axes[1].imshow(shuffled_np[0])
             axes[1].set_title(f'Interepted Info ($X_p$)\n(Residue Shuffled - Stage 2)')
             axes[1].axis('off')
 
             # 3. 攻擊者重建圖
             # 這是你要求的：攻擊者重建的那一張
-            axes[2].imshow(recons_np[B[0]])
+            axes[2].imshow(recons_np[0])
             axes[2].set_title('Attacker Recovered ($\\hat{X}$)\nfrom $X_p$ using U-Net')
             axes[2].axis('off')
 
             plt.show()
+            break
 
 def main():
     # 1. 配置與裝置設定

@@ -172,6 +172,7 @@ def idct_transform(x, size=8, stride=8, pad=0, dilation=1, ratio=8):
     x = dct.to_rgb(x)
     x = x / 255
     x = F.interpolate(x, scale_factor=1 / ratio, mode='bilinear', align_corners=True)
+    # loss do not go down, probably because datatype different.
     # x = x.clamp(min=0.0, max=1.0)
     return x
 

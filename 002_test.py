@@ -9,7 +9,7 @@ from model.model import MinusBackbone
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import torch.nn.functional as F
-import test_tool.attacker as attacker
+import testkit.attacker as attacker
 from model.utils import UNet
 
 def load_backbone(args):

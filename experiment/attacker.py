@@ -12,32 +12,20 @@ import configs
 import datasets
 from model.model import MinusBackbone
 from model.utils import UNet
-from test_tool.attacker import denormalize
+from testkit.attacker import denormalize
 
 
 def load_models_for_vis(args, weights_dir='../weights'):
-    """載入 PPFR 模型 (Stage 2) 與 攻擊者模型用於視覺化"""
-    print("正在載入模型權重進行視覺化展示...")
-
-    # 1. 載入 PPFR 骨幹 (確保在 Stage 2 模式)
     model = MinusBackbone(mode="stage2").to(args.device)
     gen_path = os.path.join(weights_dir, 'best_generator.pth')
     rec_path = os.path.join(weights_dir, 'best_recognizer.pth')
-
-    if not (os.path.exists(gen_path) and os.path.exists(rec_path)):
-        raise FileNotFoundError(f"找不到 PPFR 系統權重於 {weights_dir}。請確保已完成系統訓練。")
-
     model.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
     model.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
     model.eval()
 
-    # 2. 載入攻擊者 UNet
+    # load attacker
     attacker_model = UNet(in_channels=3, out_channels=3).to(args.device)
     attack_path = os.path.join(weights_dir, 'attacker_unet.pth')
-
-    if not os.path.exists(attack_path):
-        raise FileNotFoundError(f"找不到攻擊者權重檔 '{attack_path}'。請先執行 002_test.py 訓練攻擊者。")
-
     attacker_model.load_state_dict(torch.load(attack_path, map_location=args.device))
     attacker_model.eval()
 
@@ -111,7 +99,7 @@ def main():
     # 1. 配置與裝置設定
     args = configs.get_all_params()
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    args.datasets = "PLUSVein-FV3"  # 預設使用你的靜脈資料集
+    args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
 
     # 使用小 batch size 方便視覺化迭代
@@ -121,17 +109,11 @@ def main():
     test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
-    try:
-        # 3. 載入模型
-        ppfr_model, attacker_model = load_models_for_vis(args)
+    # 3. 載入模型
+    ppfr_model, attacker_model = load_models_for_vis(args)
 
-        # 4. 產生對比圖 (預設存 10 張)
-        save_comparison_plot(args, ppfr_model, attacker_model, test_loader, num_samples=10)
-
-    except FileNotFoundError as e:
-        print(f"\n[錯誤] {e}")
-        print("請確保 'weights/' 資料夾中有 'best_generator.pth', 'best_recognizer.pth', 和 'attacker_unet.pth'。")
-
+    # 4. 產生對比圖 (預設存 10 張)
+    save_comparison_plot(args, ppfr_model, attacker_model, test_loader, num_samples=10)
 
 if __name__ == '__main__':
     main()

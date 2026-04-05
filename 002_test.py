@@ -6,11 +6,10 @@ import sklearn.metrics as skm
 import configs
 import datasets
 from model.model import MinusBackbone
-from skimage.metrics import structural_similarity as ssim
-from skimage.metrics import peak_signal_noise_ratio as psnr
 import torch.nn.functional as F
 import testkit.attacker as attacker
 from model.utils import UNet
+import os
 
 def load_backbone(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
@@ -41,7 +40,7 @@ def eer_calculation(args, model, test_loader):
     embeddings = torch.cat(embeds_list, dim=0)
     targets = torch.cat(targets_list, dim=0)
 
-    # 使用矩陣乘法快速計算 Cosine Similarity: (N, 512) @ (512, N) -> (N, N)
+    # Cosine Similarity (N, 512) @ (512, N) -> (N, N)
     sim_matrix = torch.mm(embeddings, embeddings.t()).numpy()
 
     # 建立標籤矩陣 (N, N), 1 表示身分相同，0 表示不同
@@ -67,29 +66,18 @@ def eer_calculation(args, model, test_loader):
     return acc, eer
 
 def psnr_ssim_calculation(args, model, test_loader):
-    # ==========================================
-    # 攻擊者還原測試流程
-    # ==========================================
-    attacker_weight_path = 'weights/attacker_unet.pth'
     attacker_model = UNet(in_channels=3, out_channels=3).to(args.device)
 
-    # 檢查是否已有訓練好的攻擊者模型
-    import os
     if os.path.exists(attacker_weight_path):
-        print("\n[提示] 找到已訓練的攻擊者模型，開始載入並評估還原效果...")
+        print("\n[note] find model ! ")
         attacker_model.load_state_dict(torch.load(attacker_weight_path, map_location=args.device))
     else:
-        print("\n[提示] 找不到訓練好的攻擊者模型，開始進行訓練...")
-        # 需載入訓練資料集來訓練攻擊者
+        print("\n[note] model not found, start training attacker model ! ")
         train_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='train')
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers)
-
-        # 呼叫 attacker.py 中的訓練函式
         attacker_model = attacker.train_attacker(args, model, train_loader, epochs=10, save_path=attacker_weight_path)
 
-    # 呼叫 attacker.py 中的評估函式
     att_psnr, att_ssim = attacker.attack_evaluation(args, model, attacker_model, test_loader)
-
     return {'Attack_PSNR': att_psnr, 'Attack_SSIM': att_ssim}
 
 def print_results(res):
@@ -115,6 +103,7 @@ if __name__ == '__main__':
     args = configs.get_all_params()
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     args.datasets = "PLUSVein-FV3"
+    attacker_weight_path = 'weights/attacker_unet.pth'
     args = configs.get_dataset_params(args)
     args.mode = "stage2"
     main()

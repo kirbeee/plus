@@ -100,15 +100,9 @@ def main():
     print_results(result)
 
     # 處理攻擊者模型
-    if os.path.exists(args.attacker_weight_path):
-        from model.utils import UNet
-        att_model = UNet(in_channels=3, out_channels=3).to(args.device)
-        att_model.load_state_dict(torch.load(args.attacker_weight_path))
-    else:
-        # 訓練攻擊者
-        train_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='train')
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-        att_model = attacker.train_attacker(args, model, train_loader)
+    from model.utils import UNet
+    att_model = UNet(in_channels=3, out_channels=3).to(args.device)
+    att_model.load_state_dict(torch.load(args.attacker_weight_path))
     dsys_value = test_unlinkability(args, model, att_model, test_loader)
 
     print(f"\n================ 評估結果 ================")
@@ -124,4 +118,5 @@ if __name__ == '__main__':
     attacker_weight_path = 'weights/attacker_unet.pth'
     args = configs.get_dataset_params(args)
     args.mode = "stage2"
+    args.attacker_weight_path = "weights/attacker_unet.pth"
     main()

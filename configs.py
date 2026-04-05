@@ -50,8 +50,9 @@ def get_optim_params(args):
     return args
 
 def get_unlinkability_params(args):
-    args.omega = 1.0
-    args.n_bins = 100
+    # Unlinkability Metric 參數 (參考 TIFS18 論文設定)
+    args.ul_omega = 1.0  # 優先權權重
+    args.ul_bins = 100  # 直方圖切分的數量
     return args
 
 def seed_worker(worker_id):
@@ -76,5 +77,6 @@ def get_all_params():
     args = get_basic_params()
     args = get_optim_params(args)
     args = get_dataset_params(args)
+    args = get_unlinkability_params(args)
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     return args

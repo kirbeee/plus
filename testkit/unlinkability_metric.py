@@ -76,5 +76,3 @@ def test_unlinkability(args, model, attacker_model, test_loader):
     dsys = compute_dsys_metric(mated_scores, non_mated_scores, omega=args.ul_omega, n_bins=args.ul_bins)
     return dsys
 
-if __name__ == "__main__":
-    pass

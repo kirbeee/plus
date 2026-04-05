@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import testkit.attacker as attacker
 from model.utils import UNet
 import os
+from testkit.unlinkability_metric import test_unlinkability
 
 def load_backbone(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
@@ -97,6 +98,23 @@ def main():
     result['AAC'] = aac
     result['EER'] = eer_number
     print_results(result)
+
+    # 處理攻擊者模型
+    if os.path.exists(args.attacker_weight_path):
+        from model.utils import UNet
+        att_model = UNet(in_channels=3, out_channels=3).to(args.device)
+        att_model.load_state_dict(torch.load(args.attacker_weight_path))
+    else:
+        # 訓練攻擊者
+        train_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='train')
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        att_model = attacker.train_attacker(args, model, train_loader)
+    dsys_value = test_unlinkability(args, model, att_model, test_loader)
+
+    print(f"\n================ 評估結果 ================")
+    print(f"Unlinkability D_sys: {dsys_value:.4f}")
+    print(f"(0.0 代表完全不可連結，1.0 代表完全可連結)")
+    print(f"==========================================")
     return None
 
 if __name__ == '__main__':

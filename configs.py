@@ -49,6 +49,10 @@ def get_optim_params(args):
         args.verbose = True
     return args
 
+def get_unlinkability_params(args):
+    args.omega = 1.0
+    args.n_bins = 100
+    return args
 
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32

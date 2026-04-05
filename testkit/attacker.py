@@ -6,8 +6,6 @@ from tqdm import tqdm
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import os
-
-# 引入你的 UNet 作為攻擊者的還原模型
 from model.utils import UNet
 
 
@@ -27,7 +25,6 @@ def train_attacker(args, model, train_loader, epochs=10, save_path='weights/atta
     model.eval()
     attacker_model.train()
 
-    # 確保儲存權重的資料夾存在
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     for epoch in range(epochs):
@@ -52,9 +49,8 @@ def train_attacker(args, model, train_loader, epochs=10, save_path='weights/atta
 
         print(f"Epoch [{epoch + 1}/{epochs}], L1 Loss: {epoch_loss / len(train_loader):.4f}")
 
-    # 儲存攻擊者權重
     torch.save(attacker_model.state_dict(), save_path)
-    print(f"攻擊者模型已儲存至 '{save_path}'")
+    print(f"attacker model save: '{save_path}'")
     return attacker_model
 
 

@@ -32,9 +32,10 @@ def comparison_plot(args, model, attacker_model, img_tensor):
     """產生並儲存 [原始 vs 洗牌殘差 vs 攻擊還原] 的對比圖"""
     with torch.no_grad():
         imgs = img_tensor.to(args.device)
+        imgs = imgs.unsqueeze(0)
 
         # Stage 2 (Shuffle)
-        _, _, _, _, _, x_residue = model(imgs)
+        _, x_residue, _, _ = model(imgs)
 
         recovered_imgs = attacker_model(x_residue)
 

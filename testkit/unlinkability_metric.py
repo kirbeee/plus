@@ -69,9 +69,9 @@ class UnlinkabilityMetric:
         sns.set_context("paper", font_scale=1.7, rc={"lines.linewidth": 2.5})
         sns.set_style("white")
 
-        ax = sns.kdeplot(self.mated_scores, shade=False, label='Mated', color=sns.xkcd_rgb["medium green"])
+        ax = sns.kdeplot(self.mated_scores, fill=False, label='Mated', color=sns.xkcd_rgb["medium green"])
         x1, y1 = ax.get_lines()[0].get_data()
-        ax = sns.kdeplot(self.non_mated_scores, shade=False, label='Non-Mated', color=sns.xkcd_rgb["pale red"], linewidth=5,
+        ax = sns.kdeplot(self.non_mated_scores, fill=False, label='Non-Mated', color=sns.xkcd_rgb["pale red"], linewidth=5,
                          linestyle='--')
         x2, y2 = ax.get_lines()[1].get_data()
 

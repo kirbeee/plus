@@ -83,11 +83,11 @@ def psnr_ssim_calculation(args, model, test_loader):
 
 def print_results(res):
     print(f"\n================Test Result================")
-    print(f"ACC: {res['AAC']}%")
-    print(f"EER: {res['EER']}")
+    print(f"ACC: {res['AAC']:.4f}%")
+    print(f"EER: {res['EER']:.4f}")
     print(f"Attacker Recovered PSNR: {res['Attack_PSNR']:.4f} dB")
     print(f"Attacker Recovered SSIM: {res['Attack_SSIM']:.4f}")
-    print(f"Unlinkability D_sys: {res['Dsys']}")
+    print(f"Unlinkability D_sys: {res['Dsys']:.4f}")
     print(f"=========================================")
 
 def unlinkability_calculation(args, model, test_loader):

@@ -29,7 +29,7 @@ class UnlinkabilityMetric:
         self.omega = omega
 
         if n_bins == -1:
-            self.n_bins = int(min(len(self.mated_scores) // 10, 100))
+            self.n_bins = min(len(self.mated_scores) // 10, 100)
         else:
             self.n_bins = n_bins
 

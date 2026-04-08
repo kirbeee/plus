@@ -93,15 +93,16 @@ def print_results(res):
 def unlinkability_calculation(args, model, test_loader):
     embeds_list = []
     targets_list = []
+    args.batch_size = 1
     with torch.no_grad():
         for imgs, labels in tqdm(test_loader, desc="EER Calculation"):
             imgs = imgs.to(args.device)
             _, _, x_feature, _ = model(imgs)
             x_feature = F.normalize(x_feature, p=2, dim=1)
-
             embeds_list.append(x_feature.cpu())
             targets_list.append(labels.cpu())
 
+    # concatenate all row
     embeddings = torch.cat(embeds_list, dim=0)
     targets = torch.cat(targets_list, dim=0)
 

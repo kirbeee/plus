@@ -76,8 +76,7 @@ class UnlinkabilityMetric:
         x2, y2 = ax.get_lines()[1].get_data()
 
         ax2 = ax.twinx()
-        lns3, = ax2.plot(self.bin_centers, self.D, label='$\mathrm{D}_{\leftrightarrow}(s)$', color=sns.xkcd_rgb["denim blue"],
-                         linewidth=5)
+        lns3, = ax2.plot(self.bin_centers, self.D, label='$\mathrm{D}_{\leftrightarrow}(s)$', color=sns.xkcd_rgb["denim blue"],linewidth=5)
 
         # print omega * LR = 1 lines
         index = np.where(self.D <= 0)

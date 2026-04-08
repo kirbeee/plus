@@ -98,9 +98,7 @@ def unlinkability_calculation(args, model, test_loader):
         for imgs, labels in tqdm(test_loader, desc="Unlinkability Calculation"):
             imgs = imgs.to(args.device)
 
-            # 不要使用 x_feature，手動提取 shuffled residue
-            _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
-            x_residue_shuffle = model.shuffle(x_residue_up)
+            _, x_residue_shuffle, _, _ = model(imgs)
 
             # 將多維矩陣攤平成一維向量 (B, C*H*W) 作為模板
             template = x_residue_shuffle.view(x_residue_shuffle.size(0), -1)

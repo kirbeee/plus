@@ -87,7 +87,7 @@ def print_results(res):
     print(f"EER: {res['EER']}")
     print(f"Attacker Recovered PSNR: {res['Attack_PSNR']:.4f} dB")
     print(f"Attacker Recovered SSIM: {res['Attack_SSIM']:.4f}")
-    print(f"Unlinkability D_sys: {res['Dsys']:.4f}")
+    print(f"Unlinkability D_sys: {res['Dsys']}")
     print(f"=========================================")
 
 def unlinkability_calculation(args, model, test_loader):
@@ -124,12 +124,9 @@ def unlinkability_calculation(args, model, test_loader):
     non_mated_scores = pair_scores[pair_labels == 0]
 
     print(f"Mated pairs: {len(mated_scores)}, Non-Mated pairs: {len(non_mated_scores)}")
-
     metric = UnlinkabilityMetric(mated_scores, non_mated_scores)
     dsys_score = metric.evaluate()
-
     metric.plot(figure_file="unlinkability_dist.png")
-
     return dsys_score
 
 def main():
@@ -138,9 +135,10 @@ def main():
     model = load_backbone(args)
     result = psnr_ssim_calculation(args, model, test_loader)
     aac,eer_number = eer_calculation(args, model, test_loader)
+    Dsys = unlinkability_calculation(args, model, test_loader)
     result['AAC'] = aac
     result['EER'] = eer_number
-    result['Dsys'] = unlinkability_calculation(args, model, test_loader)
+    result['Dsys'] = Dsys
     print_results(result)
     return None
 

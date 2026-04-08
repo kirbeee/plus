@@ -29,7 +29,7 @@ class UnlinkabilityMetric:
         self.omega = omega
 
         if n_bins == -1:
-            self.nBins = min(len(self.mated_scores) / 10, 100)
+            self.n_bins = int(min(len(self.mated_scores) // 10, 100))
         else:
             self.n_bins = n_bins
 
@@ -60,7 +60,7 @@ class UnlinkabilityMetric:
 
         # Compute and print Dsys
         Dsys = np.trapz(x=bin_centers, y=D * y1)
-        print(Dsys)
+        return Dsys
 
     def plot(self, figure_file, figure_title='Unlinkability analysis', legend_loc='upper right'):
         ### Plot final figure of D + score distributions

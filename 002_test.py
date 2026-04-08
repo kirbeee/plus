@@ -95,11 +95,19 @@ def unlinkability_calculation(args, model, test_loader):
     targets_list = []
     args.batch_size = 1
     with torch.no_grad():
-        for imgs, labels in tqdm(test_loader, desc="EER Calculation"):
+        for imgs, labels in tqdm(test_loader, desc="Unlinkability Calculation"):
             imgs = imgs.to(args.device)
-            _, _, x_feature, _ = model(imgs)
-            x_feature = F.normalize(x_feature, p=2, dim=1)
-            embeds_list.append(x_feature.cpu())
+
+            # 不要使用 x_feature，手動提取 shuffled residue
+            _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
+            x_residue_shuffle = model.shuffle(x_residue_up)
+
+            # 將多維矩陣攤平成一維向量 (B, C*H*W) 作為模板
+            template = x_residue_shuffle.view(x_residue_shuffle.size(0), -1)
+            # 正規化以計算 Cosine Similarity
+            template = F.normalize(template, p=2, dim=1)
+
+            embeds_list.append(template.cpu())
             targets_list.append(labels.cpu())
 
     # concatenate all row

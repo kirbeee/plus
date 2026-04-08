@@ -44,23 +44,23 @@ class UnlinkabilityMetric:
         nonMatedScores = self.non_mated_scores
 
         # define range of scores to compute D
-        bin_edges = np.linspace(min([min(matedScores), min(nonMatedScores)]),
+        self.bin_edges = np.linspace(min([min(matedScores), min(nonMatedScores)]),
                                    max([max(matedScores), max(nonMatedScores)]), num=self.n_bins + 1, endpoint=True)
-        bin_centers = (bin_edges[1:] + bin_edges[:-1]) / 2  # find bin centers
+        self.bin_centers = (self.bin_edges[1:] + self.bin_edges[:-1]) / 2  # find bin centers
 
         # compute score distributions (normalised histogram)
-        y1 = np.histogram(matedScores, bins=bin_edges, density=True)[0]
-        y2 = np.histogram(nonMatedScores, bins=bin_edges, density=True)[0]
+        y1 = np.histogram(matedScores, bins=self.bin_edges, density=True)[0]
+        y2 = np.histogram(nonMatedScores, bins=self.bin_edges, density=True)[0]
 
         # Compute LR and D
         LR = np.divide(y1, y2, out=np.ones_like(y1), where=y2 != 0)
-        D = 2 * (self.omega * LR / (1 + self.omega * LR)) - 1
-        D[self.omega * LR <= 1] = 0
-        D[y2 == 0] = 1  # this is the definition of D, and at the same time takes care of inf / nan
+        self.D = 2 * (self.omega * LR / (1 + self.omega * LR)) - 1
+        self.D[self.omega * LR <= 1] = 0
+        self.D[y2 == 0] = 1  # this is the definition of D, and at the same time takes care of inf / nan
 
         # Compute and print Dsys
-        Dsys = np.trapz(x=bin_centers, y=D * y1)
-        return Dsys
+        self.Dsys = np.trapz(x=self.bin_centers, y=self.D * y1)
+        return self.Dsys
 
     def plot(self, figure_file, figure_title='Unlinkability analysis', legend_loc='upper right'):
         ### Plot final figure of D + score distributions

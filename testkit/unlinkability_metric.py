@@ -1,78 +1,108 @@
-import torch
+'''
+Implementation of the local and global unlinkability metrics for biometric template protection systems evaluation.
+More details in:
+
+
+[TIFS18] M. Gomez-Barrero, J. Galbally, C. Rathgeb, C. Busch, "General Framework to Evaluate Unlinkability
+in Biometric Template Protection Systems", in IEEE Trans. on Informations Forensics and Security, vol. 3, no. 6, pp. 1406-1420, June 2018
+
+Please remember to reference article [TIFS18] on any work made public, whatever the form,
+based directly or indirectly on these metrics.
+'''
+
+__author__ = "Marta Gomez-Barrero"
+__copyright__ = "Copyright (C) 2017 Hochschule Darmstadt"
+__license__ = "License Agreement provided by Hochschule Darmstadt (https://github.com/dasec/unlinkability-metric/blob/master/hda-license.pdf)"
+__version__ = "2.0"
+
 import numpy as np
-import torch.nn.functional as F
-from tqdm import tqdm
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import pylab
+import seaborn as sns
 
+class UnlinkabilityMetric:
+    def __init__(self, mated_scores, non_mated_scores, omega=1.0, n_bins=-1):
+        self.mated_scores = np.array(mated_scores)
+        self.non_mated_scores = np.array(non_mated_scores)
+        self.omega = omega
 
-def compute_dsys_metric(mated_scores, non_mated_scores, omega=1.0, n_bins=100):
-    """
-    計算全域不可連結性指標 D_sys (Global Measure)
-    參考自 General Framework to Evaluate Unlinkability (TIFS18)
-    """
-    # 決定分數範圍並建立直方圖
-    min_s = min(np.min(mated_scores), np.min(non_mated_scores))
-    max_s = max(np.max(mated_scores), np.max(non_mated_scores))
-    bin_edges = np.linspace(min_s, max_s, n_bins + 1)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        if n_bins == -1:
+            self.nBins = min(len(self.mated_scores) / 10, 100)
+        else:
+            self.n_bins = n_bins
 
-    # 計算機率密度函數 (PDF)
-    y_mated, _ = np.histogram(mated_scores, bins=bin_edges, density=True)
-    y_non_mated, _ = np.histogram(non_mated_scores, bins=bin_edges, density=True)
+        self.bin_edges = None
+        self.bin_centers = None
+        self.D = None
+        self.Dsys = None
 
-    # 防止除以 0
-    with np.errstate(divide='ignore', invalid='ignore'):
-        LR = np.divide(y_mated, y_non_mated)
-        # 根據論文公式: D = 2 * (omega * LR / (1 + omega * LR)) - 1
-        D = 2 * (omega * LR / (1 + omega * LR)) - 1
-        D[omega * LR <= 1] = 0  # 只有當 LR > 1/omega 時才具備可連結性
-        D[y_non_mated == 0] = 1  # 如果 Non-mated 機率為 0，視為完全可連結
+    def evaluate(self):
+        # load scores
+        matedScores = self.mated_scores
+        nonMatedScores = self.non_mated_scores
 
-    # 全域指標 D_sys = 積分 (D(s) * P(s|mated) ds)
-    dsys = np.trapz(D * y_mated, bin_centers)
-    return np.clip(dsys, 0, 1)
+        # define range of scores to compute D
+        bin_edges = np.linspace(min([min(matedScores), min(nonMatedScores)]),
+                                   max([max(matedScores), max(nonMatedScores)]), num=self.n_bins + 1, endpoint=True)
+        bin_centers = (bin_edges[1:] + bin_edges[:-1]) / 2  # find bin centers
 
+        # compute score distributions (normalised histogram)
+        y1 = np.histogram(matedScores, bins=bin_edges, density=True)[0]
+        y2 = np.histogram(nonMatedScores, bins=bin_edges, density=True)[0]
 
-def test_unlinkability(args, model, attacker_model, test_loader):
-    """
-    評估 Attacker 生成影像與 Ground Truth 的不可連結性
-    """
-    model.eval()
-    attacker_model.eval()
+        # Compute LR and D
+        LR = np.divide(y1, y2, out=np.ones_like(y1), where=y2 != 0)
+        D = 2 * (self.omega * LR / (1 + self.omega * LR)) - 1
+        D[self.omega * LR <= 1] = 0
+        D[y2 == 0] = 1  # this is the definition of D, and at the same time takes care of inf / nan
 
-    gt_features = []
-    recovered_features = []
-    labels = []
+        # Compute and print Dsys
+        Dsys = np.trapz(x=bin_centers, y=D * y1)
+        print(Dsys)
 
-    with torch.no_grad():
-        for imgs, target in tqdm(test_loader, desc="提取特徵進行 Unlinkability 測試"):
-            imgs = imgs.to(args.device)
+    def plot(self, figure_file, figure_title='Unlinkability analysis', legend_loc='upper right'):
+        ### Plot final figure of D + score distributions
+        plt.clf()
 
-            # 1. 取得 Ground Truth 特徵
-            _, _, feat_gt, _ = model(imgs)
-            gt_features.append(F.normalize(feat_gt, p=2, dim=1).cpu())
+        sns.set_context("paper", font_scale=1.7, rc={"lines.linewidth": 2.5})
+        sns.set_style("white")
 
-            # 2. 取得 Attacker 還原影像
-            _, _, _, _, _, x_res = model.obtain_residue(imgs)
-            x_input = model.shuffle(x_res)
-            recovered_img = attacker_model(x_input)
+        ax = sns.kdeplot(self.mated_scores, shade=False, label='Mated', color=sns.xkcd_rgb["medium green"])
+        x1, y1 = ax.get_lines()[0].get_data()
+        ax = sns.kdeplot(self.non_mated_scores, shade=False, label='Non-Mated', color=sns.xkcd_rgb["pale red"], linewidth=5,
+                         linestyle='--')
+        x2, y2 = ax.get_lines()[1].get_data()
 
-            # 3. 取得還原影像的特徵
-            _, _, feat_rec, _ = model(recovered_img)
-            recovered_features.append(F.normalize(feat_rec, p=2, dim=1).cpu())
-            labels.append(target)
+        ax2 = ax.twinx()
+        lns3, = ax2.plot(self.bin_centers, self.D, label='$\mathrm{D}_{\leftrightarrow}(s)$', color=sns.xkcd_rgb["denim blue"],
+                         linewidth=5)
 
-    gt_f = torch.cat(gt_features, dim=0)
-    rec_f = torch.cat(recovered_features, dim=0)
-    lbls = torch.cat(labels, dim=0).numpy()
+        # print omega * LR = 1 lines
+        index = np.where(self.D <= 0)
+        ax.axvline(self.bin_centers[index[0][0]], color='k', linestyle='--')
 
-    # 計算餘弦相似度矩陣 (N x N)
-    sim_matrix = torch.mm(gt_f, rec_f.t()).numpy()
+        # index = np.where(LR > 1)
+        # ax.axvline(bin_centers[index[0][2]], color='k', linestyle='--')
+        # ax.axvline(bin_centers[index[0][-1]], color='k', linestyle='--')
 
-    # 區分 Mated (同一人) 與 Non-Mated (不同人)
-    label_mat = (lbls[:, None] == lbls[None, :])
-    mated_scores = sim_matrix[label_mat]
-    non_mated_scores = sim_matrix[~label_mat]
+        # Figure formatting
+        ax.spines['top'].set_visible(False)
+        ax.set_ylabel("Probability Density")
+        ax.set_xlabel("Score")
+        ax.set_title("%s, $\mathrm{D}_{\leftrightarrow}^{\mathit{sys}}$ = %.2f" % (figure_title, self.Dsys), y=1.02)
 
-    dsys = compute_dsys_metric(mated_scores, non_mated_scores, omega=args.ul_omega, n_bins=args.ul_bins)
-    return dsys
+        labs = [ax.get_lines()[0].get_label(), ax.get_lines()[1].get_label(), ax2.get_lines()[0].get_label()]
+        lns = [ax.get_lines()[0], ax.get_lines()[1], lns3]
+        ax.legend(lns, labs, loc=legend_loc)
 
+        ax.set_ylim([0, max(max(y1), max(y2)) * 1.05])
+        ax.set_xlim([self.bin_edges[0] * 0.98, self.bin_edges[-1] * 1.02])
+        ax2.set_ylim([0, 1.1])
+        ax2.set_ylabel("$\mathrm{D}_{\leftrightarrow}(s)$")
+
+        plt.gcf().subplots_adjust(bottom=0.15)
+        plt.gcf().subplots_adjust(left=0.15)
+        plt.gcf().subplots_adjust(right=0.88)
+        pylab.savefig(figure_file)

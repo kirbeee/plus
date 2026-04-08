@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import testkit.attacker as attacker
 from model.utils import UNet
 import os
-from testkit.unlinkability_metric import test_unlinkability
+from testkit.unlinkability_metric import UnlinkabilityMetric
 
 def load_backbone(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
@@ -87,7 +87,50 @@ def print_results(res):
     print(f"EER: {res['EER']}")
     print(f"Attacker Recovered PSNR: {res['Attack_PSNR']:.4f} dB")
     print(f"Attacker Recovered SSIM: {res['Attack_SSIM']:.4f}")
+    print(f"Unlinkability D_sys: {res['Dsys']:.4f}")
     print(f"=========================================")
+
+def unlinkability_calculation(args, model, test_loader):
+    embeds_list = []
+    targets_list = []
+    with torch.no_grad():
+        for imgs, labels in tqdm(test_loader, desc="EER Calculation"):
+            imgs = imgs.to(args.device)
+            _, _, x_feature, _ = model(imgs)
+            x_feature = F.normalize(x_feature, p=2, dim=1)
+
+            embeds_list.append(x_feature.cpu())
+            targets_list.append(labels.cpu())
+
+    embeddings = torch.cat(embeds_list, dim=0)
+    targets = torch.cat(targets_list, dim=0)
+
+    # Cosine Similarity (N, 512) @ (512, N) -> (N, N)
+    sim_matrix = torch.mm(embeddings, embeddings.t()).numpy()
+
+    # 建立標籤矩陣 (N, N), 1 表示身分相同，0 表示不同
+    targets_np = targets.numpy()
+    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
+
+    # 取得上三角矩陣的索引 (k=1 代表排除主對角線，也就是自己跟自己的比較)
+    row_idx, col_idx = np.triu_indices(len(targets_np), k=1)
+
+    # 透過索引，攤平所有不重複的「兩兩配對」分數與標籤
+    pair_scores = sim_matrix[row_idx, col_idx]
+    pair_labels = label_matrix[row_idx, col_idx]
+
+    # 利用標籤過濾出 mated (同身分) 與 non_mated (不同身分) 的分數
+    mated_scores = pair_scores[pair_labels == 1]
+    non_mated_scores = pair_scores[pair_labels == 0]
+
+    print(f"Mated pairs: {len(mated_scores)}, Non-Mated pairs: {len(non_mated_scores)}")
+
+    metric = UnlinkabilityMetric(mated_scores, non_mated_scores)
+    dsys_score = metric.evaluate()
+
+    metric.plot(figure_file="unlinkability_dist.png")
+
+    return dsys_score
 
 def main():
     test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
@@ -97,18 +140,8 @@ def main():
     aac,eer_number = eer_calculation(args, model, test_loader)
     result['AAC'] = aac
     result['EER'] = eer_number
+    result['Dsys'] = unlinkability_calculation(args, model, test_loader)
     print_results(result)
-
-    # 處理攻擊者模型
-    from model.utils import UNet
-    att_model = UNet(in_channels=3, out_channels=3).to(args.device)
-    att_model.load_state_dict(torch.load(args.attacker_weight_path))
-    dsys_value = test_unlinkability(args, model, att_model, test_loader)
-
-    print(f"\n================ 評估結果 ================")
-    print(f"Unlinkability D_sys: {dsys_value:.4f}")
-    print(f"(0.0 代表完全不可連結，1.0 代表完全可連結)")
-    print(f"==========================================")
     return None
 
 if __name__ == '__main__':

@@ -122,12 +122,16 @@ def unlinkability_calculation(args, model, test_loader):
 
     # --- Mated pairs ---
     for i in range(N//2):
-        mated_scores =torch.dot(templates_A[2*i] == templates_A[2*i+1])  # 同一個人的兩張圖
+        score = torch.dot(templates_A[2*i] == templates_A[2*i+1])  # 同一個人的兩張圖
+        mated_scores.append(score)
 
     # --- Non-mated pairs ---
     for i in range(N):
         for j in range (i+2, N):
-            non_mated_scores = torch.dot(templates_A[i] == templates_A[j])
+            if i % 2 == 0 and j == i + 1:
+                continue  # 跳過同一個人的兩張圖
+            score = torch.dot(templates_A[i] == templates_A[j])
+            mated_scores.append(score)
 
     mated_scores = np.array(mated_scores)
     non_mated_scores = np.array(non_mated_scores)

@@ -91,48 +91,60 @@ def print_results(res):
     print(f"=========================================")
 
 def unlinkability_calculation(args, model, test_loader):
-    embeds_list = []
+    mated_scores = []
+    non_mated_scores = []
+
+    # 每張圖只產生一次 residue，但 shuffle 兩次（不同 θ）
+    all_templates_A = []  # 第一次 shuffle
+    all_templates_B = []  # 第二次 shuffle（不同 θ）
     targets_list = []
-    args.batch_size = 1
+
     with torch.no_grad():
         for imgs, labels in tqdm(test_loader, desc="Unlinkability Calculation"):
             imgs = imgs.to(args.device)
 
-            # 不要使用 x_feature，手動提取 shuffled residue
+            # 取得 residue（只算一次，節省計算）
             _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
-            x_residue_shuffle = model.shuffle(x_residue_up)
 
-            # 將多維矩陣攤平成一維向量 (B, C*H*W) 作為模板
-            template = x_residue_shuffle.view(x_residue_shuffle.size(0), -1)
-            # 正規化以計算 Cosine Similarity
-            template = F.normalize(template, p=2, dim=1)
+            # 用兩個不同的隨機 θ shuffle 同一個 residue
+            xp_A = model.shuffle(x_residue_up)   # θ_1
+            xp_B = model.shuffle(x_residue_up)   # θ_2（不同 θ）
 
-            embeds_list.append(template.cpu())
+            # 用 fp 提取特徵
+            feat_A = model.recognizer(xp_A)
+            feat_B = model.recognizer(xp_B)
+            feat_A = F.normalize(feat_A, p=2, dim=1)
+            feat_B = F.normalize(feat_B, p=2, dim=1)
+
+            all_templates_A.append(feat_A.cpu())
+            all_templates_B.append(feat_B.cpu())
             targets_list.append(labels.cpu())
 
-    # concatenate all row
-    embeddings = torch.cat(embeds_list, dim=0)
-    targets = torch.cat(targets_list, dim=0)
-
-    # Cosine Similarity (N, 512) @ (512, N) -> (N, N)
-    sim_matrix = torch.mm(embeddings, embeddings.t()).numpy()
-
-    # 建立標籤矩陣 (N, N), 1 表示身分相同，0 表示不同
+    templates_A = torch.cat(all_templates_A, dim=0)  # (N, D)
+    templates_B = torch.cat(all_templates_B, dim=0)  # (N, D)
+    targets = torch.cat(targets_list, dim=0)          # (N,)
     targets_np = targets.numpy()
-    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
+    N = len(targets_np)
 
-    # 取得上三角矩陣的索引 (k=1 代表排除主對角線，也就是自己跟自己的比較)
-    row_idx, col_idx = np.triu_indices(len(targets_np), k=1)
+    # --- Mated pairs ---
+    # 同一張圖的 A、B 版本 → 同一生物特徵、不同 θ
+    for i in range(N):
+        s = torch.dot(templates_A[i], templates_B[i]).item()
+        mated_scores.append(s)
 
-    # 透過索引，攤平所有不重複的「兩兩配對」分數與標籤
-    pair_scores = sim_matrix[row_idx, col_idx]
-    pair_labels = label_matrix[row_idx, col_idx]
+    # --- Non-mated pairs ---
+    # 不同人，各自用自己的 θ_A
+    row_idx, col_idx = np.triu_indices(N, k=1)
+    for r, c in zip(row_idx, col_idx):
+        if targets_np[r] != targets_np[c]:
+            s = torch.dot(templates_A[r], templates_A[c]).item()
+            non_mated_scores.append(s)
 
-    # 利用標籤過濾出 mated (同身分) 與 non_mated (不同身分) 的分數
-    mated_scores = pair_scores[pair_labels == 1]
-    non_mated_scores = pair_scores[pair_labels == 0]
+    mated_scores = np.array(mated_scores)
+    non_mated_scores = np.array(non_mated_scores)
 
     print(f"Mated pairs: {len(mated_scores)}, Non-Mated pairs: {len(non_mated_scores)}")
+
     metric = UnlinkabilityMetric(mated_scores, non_mated_scores)
     dsys_score = metric.evaluate()
     metric.plot(figure_file="unlinkability_dist.png")

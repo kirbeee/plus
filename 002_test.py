@@ -103,14 +103,14 @@ def unlinkability_calculation(args, model, test_loader):
             imgs = imgs.to(args.device)
 
             # 取得 residue（只算一次，節省計算）
-            _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
-
+            # _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
+            _, xp_A, _, _ = model(imgs)
             # 用兩個不同的隨機 θ shuffle 同一個 residue
-            xp_A = model.shuffle(x_residue_up)   # θ_1
-
+            # xp_A = model.shuffle(x_residue_up)   # θ_1
+            feat_A = F.normalize(xp_A.view(xp_A.size(0), -1), p=2, dim=1)
             # 用 fp 提取特徵
-            feat_A = model.recognizer(xp_A)
-            feat_A = F.normalize(feat_A, p=2, dim=1)
+            # feat_A = model.recognizer(xp_A)
+            # feat_A = F.normalize(feat_A, p=2, dim=1)
 
             all_templates_A.append(feat_A.cpu())
             targets_list.append(labels.cpu())
@@ -122,7 +122,7 @@ def unlinkability_calculation(args, model, test_loader):
 
     # --- Mated pairs ---
     for i in range(N//2):
-        score = torch.dot(templates_A[2*i] == templates_A[2*i+1])  # 同一個人的兩張圖
+        score = torch.dot(templates_A[2*i], templates_A[2*i+1])  # 同一個人的兩張圖
         mated_scores.append(score)
 
     # --- Non-mated pairs ---
@@ -130,8 +130,8 @@ def unlinkability_calculation(args, model, test_loader):
         for j in range (i+2, N):
             if i % 2 == 0 and j == i + 1:
                 continue  # 跳過同一個人的兩張圖
-            score = torch.dot(templates_A[i] == templates_A[j])
-            mated_scores.append(score)
+            score = torch.dot(templates_A[i], templates_A[j])
+            non_mated_scores.append(score)
 
     mated_scores = np.array(mated_scores)
     non_mated_scores = np.array(non_mated_scores)
@@ -147,13 +147,13 @@ def main():
     test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
     model = load_backbone(args)
-    result = psnr_ssim_calculation(args, model, test_loader)
-    aac,eer_number = eer_calculation(args, model, test_loader)
+    # result = psnr_ssim_calculation(args, model, test_loader)
+    # aac,eer_number = eer_calculation(args, model, test_loader)
     Dsys = unlinkability_calculation(args, model, test_loader)
-    result['AAC'] = aac
-    result['EER'] = eer_number
-    result['Dsys'] = Dsys
-    print_results(result)
+    # result['AAC'] = aac
+    # result['EER'] = eer_number
+    # result['Dsys'] = Dsys
+    # print_results(result)
     return None
 
 if __name__ == '__main__':

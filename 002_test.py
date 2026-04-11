@@ -96,7 +96,6 @@ def unlinkability_calculation(args, model, test_loader):
 
     # 每張圖只產生一次 residue，但 shuffle 兩次（不同 θ）
     all_templates_A = []  # 第一次 shuffle
-    all_templates_B = []  # 第二次 shuffle（不同 θ）
     targets_list = []
 
     with torch.no_grad():
@@ -108,37 +107,27 @@ def unlinkability_calculation(args, model, test_loader):
 
             # 用兩個不同的隨機 θ shuffle 同一個 residue
             xp_A = model.shuffle(x_residue_up)   # θ_1
-            xp_B = model.shuffle(x_residue_up)   # θ_2（不同 θ）
 
             # 用 fp 提取特徵
             feat_A = model.recognizer(xp_A)
-            feat_B = model.recognizer(xp_B)
             feat_A = F.normalize(feat_A, p=2, dim=1)
-            feat_B = F.normalize(feat_B, p=2, dim=1)
 
             all_templates_A.append(feat_A.cpu())
-            all_templates_B.append(feat_B.cpu())
             targets_list.append(labels.cpu())
 
     templates_A = torch.cat(all_templates_A, dim=0)  # (N, D)
-    templates_B = torch.cat(all_templates_B, dim=0)  # (N, D)
     targets = torch.cat(targets_list, dim=0)          # (N,)
     targets_np = targets.numpy()
     N = len(targets_np)
 
     # --- Mated pairs ---
-    # 同一張圖的 A、B 版本 → 同一生物特徵、不同 θ
-    for i in range(N):
-        s = torch.dot(templates_A[i], templates_B[i]).item()
-        mated_scores.append(s)
+    for i in range(N//2):
+        mated_scores =torch.dot(templates_A[2*i] == templates_A[2*i+1])  # 同一個人的兩張圖
 
     # --- Non-mated pairs ---
-    # 不同人，各自用自己的 θ_A
-    row_idx, col_idx = np.triu_indices(N, k=1)
-    for r, c in zip(row_idx, col_idx):
-        if targets_np[r] != targets_np[c]:
-            s = torch.dot(templates_A[r], templates_A[c]).item()
-            non_mated_scores.append(s)
+    for i in range(N):
+        for j in range (i+2, N):
+            non_mated_scores = torch.dot(templates_A[i] == templates_A[j])
 
     mated_scores = np.array(mated_scores)
     non_mated_scores = np.array(non_mated_scores)

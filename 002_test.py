@@ -90,7 +90,7 @@ def print_results(res):
     print(f"Unlinkability D_sys: {res['Dsys']:.4f}")
     print(f"=========================================")
 
-def unlinkability_calculation(args, model, test_loader):
+def unlinkability_calculation(args, model, test_loader, version="shuffled"):
     mated_scores = []
     non_mated_scores = []
 
@@ -101,17 +101,16 @@ def unlinkability_calculation(args, model, test_loader):
     with torch.no_grad():
         for imgs, labels in tqdm(test_loader, desc="Unlinkability Calculation"):
             imgs = imgs.to(args.device)
-
-            # 取得 residue（只算一次，節省計算）
-            # _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
-            _, xp_A, _, _ = model(imgs)
-            # 用兩個不同的隨機 θ shuffle 同一個 residue
-            # xp_A = model.shuffle(x_residue_up)   # θ_1
-            feat_A = F.normalize(xp_A.view(xp_A.size(0), -1), p=2, dim=1)
-            # 用 fp 提取特徵
-            # feat_A = model.recognizer(xp_A)
-            # feat_A = F.normalize(feat_A, p=2, dim=1)
-
+            if version == "shuffled": # 取得 residue（只算一次，節省計算）
+                _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
+                xp_A = model.shuffle(x_residue_up)   # θ_1
+                feat_A = F.normalize(xp_A.view(xp_A.size(0), -1), p=2, dim=1)
+            elif version == "non shuffled":
+                _, xp_A, _, _ = model(imgs)
+                feat_A = F.normalize(xp_A.view(xp_A.size(0), -1), p=2, dim=1)
+            elif version == "embeding":
+                _, _, feat_A, _ = model(imgs)
+                feat_A = F.normalize(feat_A, p=2, dim=1)
             all_templates_A.append(feat_A.cpu())
             targets_list.append(labels.cpu())
 
@@ -127,9 +126,7 @@ def unlinkability_calculation(args, model, test_loader):
 
     # --- Non-mated pairs ---
     for i in range(N):
-        for j in range (i+2, N):
-            if i % 2 == 0 and j == i + 1:
-                continue  # 跳過同一個人的兩張圖
+        for j in range(i + 2, N):
             score = torch.dot(templates_A[i], templates_A[j])
             non_mated_scores.append(score)
 

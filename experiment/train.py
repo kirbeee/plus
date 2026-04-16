@@ -51,8 +51,8 @@ def visualize_stages():
     model_s2.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
     model_s2.eval()
     with torch.no_grad():
-        x_encode_s2, x_residue_s2, _, _ = model_s2(img_tensor)
-
+        _, _, _, _, _, x_residue_up_s2 = model_s2.obtain_residue(img_tensor)
+        x_residue_s2 = model_s2.shuffle(x_residue_up_s2)
     fig, axes = plt.subplots(1, 6, figsize=(16, 4))
     axes[0].imshow(tensor_to_np(img_tensor))
     axes[0].set_title("Original Image (Input)")

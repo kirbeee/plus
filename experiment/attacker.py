@@ -29,11 +29,10 @@ def load_models_for_vis(args, weights_dir='../weights'):
 
 
 def comparison_plot(args, model, attacker_model, img_tensor):
+    imgs = img_tensor.unsqueeze(0).to(args.device)
     """產生並儲存 [原始 vs 洗牌殘差 vs 攻擊還原] 的對比圖"""
+    print(imgs.shape)
     with torch.no_grad():
-        imgs = img_tensor.to(args.device)
-        imgs = imgs.unsqueeze(0)
-
         # Stage 2 (Shuffle)
         _, _, _, _, _, x_residue_up_s2 = model.obtain_residue(img_tensor)
         x_residue = model.shuffle(x_residue_up_s2)

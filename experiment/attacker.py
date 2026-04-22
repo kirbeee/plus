@@ -35,8 +35,8 @@ def comparison_plot(args, model, attacker_model, img_tensor):
         imgs = imgs.unsqueeze(0)
 
         # Stage 2 (Shuffle)
-        _, x_residue, _, _ = model(imgs)
-
+        _, _, _, _, _, x_residue_up_s2 = model.obtain_residue(img_tensor)
+        x_residue = model.shuffle(x_residue_up_s2)
         recovered_imgs = attacker_model(x_residue)
 
         # --- 轉換為 Numpy 用於繪圖 [0, 1] (B, H, W, C) ---

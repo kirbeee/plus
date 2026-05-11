@@ -34,7 +34,7 @@ def comparison_plot(args, model, attacker_model, img_tensor):
     print(imgs.shape)
     with torch.no_grad():
         # Stage 2 (Shuffle)
-        _, _, _, _, _, x_residue_up_s2 = model.obtain_residue(img_tensor)
+        _, _, _, _, _, x_residue_up_s2 = model.obtain_residue(imgs)
         x_residue = model.shuffle(x_residue_up_s2)
         recovered_imgs = attacker_model(x_residue)
 

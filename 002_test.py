@@ -144,13 +144,13 @@ def main():
     test_dataset = datasets.ImagesDataset(args=args, data_type="LED", phase='test')
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
     model = load_backbone(args)
-    # result = psnr_ssim_calculation(args, model, test_loader)
-    # aac,eer_number = eer_calculation(args, model, test_loader)
+    result = psnr_ssim_calculation(args, model, test_loader)
+    aac,eer_number = eer_calculation(args, model, test_loader)
     Dsys = unlinkability_calculation(args, model, test_loader)
-    # result['AAC'] = aac
-    # result['EER'] = eer_number
-    # result['Dsys'] = Dsys
-    # print_results(result)
+    result['AAC'] = aac
+    result['EER'] = eer_number
+    result['Dsys'] = Dsys
+    print_results(result)
     return None
 
 if __name__ == '__main__':

@@ -82,9 +82,8 @@ def train():
                 'L_fr': f"{loss_fr.item():.4f}"
             })
             pbar.update(1)
-
             imgs, labels = prefetcher.next()
-
+        pbar.close()
         print(f"Epoch [{epoch + 1}/{epochs}] - Avg Loss: {total_loss / len(train_loader):.4f} "
               f"| Avg L_gen: {total_loss_gen / len(train_loader):.4f} "
               f"| Avg L_fr: {total_loss_fr / len(train_loader):.4f}")

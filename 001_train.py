@@ -54,10 +54,11 @@ def train():
         total_loss_gen = 0.0
         total_loss_fr = 0.0
 
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}")
+        prefetcher = datasets.data_prefetcher(train_loader)
+        pbar = tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{epochs}")
 
-        for imgs, labels in pbar:
-            imgs, labels = imgs.to(args.device), labels.to(args.device)
+        imgs, labels = prefetcher.next()
+        while imgs is not None:
             optimizer.zero_grad()
             x_encode, x_residue, x_feature, x_latent = model(imgs)
 
@@ -80,6 +81,9 @@ def train():
                 'L_gen': f"{loss_gen.item():.4f}",
                 'L_fr': f"{loss_fr.item():.4f}"
             })
+            pbar.update(1)
+
+            imgs, labels = prefetcher.next()
 
         print(f"Epoch [{epoch + 1}/{epochs}] - Avg Loss: {total_loss / len(train_loader):.4f} "
               f"| Avg L_gen: {total_loss_gen / len(train_loader):.4f} "

@@ -54,7 +54,6 @@ def create_PLUSVein_annotation(args):
 if __name__ == '__main__':
     args = configs.get_all_params()
     configs.setup_seed(args.seed)
-
     args.datasets = 'PLUSVein-FV3'
     args = configs.get_dataset_params(args)
     create_PLUSVein_annotation(args)

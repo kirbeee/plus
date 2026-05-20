@@ -1,71 +1,93 @@
 import os
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.optim as optim
 from tqdm import tqdm
-import configs
-import datasets
-from torchkit.head.localfc.arcface import ArcFace
-from model.model import MinusBackbone, MinusLoss
 
-def train():
+import configs
+import datasets  # 沿用你的 datasets.py
+from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
+from network.logits import ArcFace
+
+
+def train(args):
     # --- hyperparameter ---
     configs.setup_seed(args.seed)
 
     # --- data loading ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, persistent_workers=True, pin_memory=True, drop_last=True )
-    num_classes =len(set(item['label'] for item in train_dataset.data))
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.workers,
+        persistent_workers=True,
+        pin_memory=True,
+        drop_last=True
+    )
+    # 動態取得類別數量
+    num_classes = len(set(item['label'] for item in train_dataset.data))
     print(f"總訓練樣本數: {len(train_dataset)}, 總類別數: {num_classes}")
 
     # --- model initialize ---
-    model = MinusBackbone(mode=args.mode).to(args.device)
-    arcface_head = ArcFace(in_features=512,scale=32, out_features=num_classes).to(args.device)
+    # 1. 初始化特徵提取器 (Feature Extractor) 與雜湊生成器 (Hash Generator)
+    feature_extractor = FSB_Hash_Net(embedding_size=args.dim, do_prob=args.dropout).to(args.device)
+    generator = Hash_Generator(embedding_size=args.dim, do_prob=args.dropout, device=args.device,
+                               out_embedding_size=args.hash_dim).to(args.device)
 
-    if args.mode == 'stage2':
-        # 1. load Stage 1 Generator weights
-        if os.path.exists('weights/best_generator.pth'):
-            model.generator.load_state_dict(torch.load('weights/best_generator.pth'))
-            print("Successfully loaded pre-trained Generator from Stage 1.")
-        else:
-            print("Warning: No Stage 1 weights found! Stage 2 will start from scratch (Not Recommended).")
+    # 2. 初始化兩個 ArcFace 分類頭 (一個接特徵、一個接雜湊碼)
+    feat_fc = ArcFace(in_features=args.dim, out_features=num_classes, s=64.0, m=0.35, device=args.device).to(
+        args.device)
+    hash_fc = ArcFace(in_features=args.hash_dim, out_features=num_classes, s=128.0, m=0.35, device=args.device).to(
+        args.device)
 
-        # 3. 凍結生成器 (Stage 2 核心要求)
-        for param in model.generator.parameters():
-            param.requires_grad = False
-        model.generator.eval()  # 確保 BatchNorm/Dropout 狀態固定
-
-    # --- Optimizer ---
-
+    # --- Optimizer & Criterion ---
+    # 針對不同的網路元件設定學習率 (FC 層通常需要較大的學習率)
     optimizer = optim.AdamW([
-        {'params': model.parameters(), 'lr': args.lr,'weight_decay': args.weight_decay},
-        {'params': arcface_head.parameters(), 'lr':args.lr, 'weight_decay': args.weight_decay}
+        {'params': feature_extractor.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay},
+        {'params': generator.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay},
+        {'params': feat_fc.parameters(), 'lr': args.lr * 10, 'weight_decay': args.weight_decay},
+        {'params': hash_fc.parameters(), 'lr': args.lr * 10, 'weight_decay': args.weight_decay}
     ])
 
-    criterion = MinusLoss(mode=args.mode).to(args.device)
+    # 使用標準的 CrossEntropyLoss 來處理 ArcFace 的輸出
+    criterion = nn.CrossEntropyLoss().to(args.device)
 
     # --- 訓練迴圈 ---
     best_loss = float('inf')
-    for epoch in range(epochs):
-        model.train()
-        arcface_head.train()
+    for epoch in range(args.epochs):
+        feature_extractor.train()
+        generator.train()
+        feat_fc.train()
+        hash_fc.train()
 
         total_loss = 0.0
-        total_loss_gen = 0.0
-        total_loss_fr = 0.0
+        total_loss_feat = 0.0
+        total_loss_hash = 0.0
 
         prefetcher = datasets.data_prefetcher(train_loader)
-        pbar = tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{epochs}")
+        pbar = tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{args.epochs}")
 
         imgs, labels = prefetcher.next()
         while imgs is not None:
+            # 確保資料在正確的裝置上
+            imgs, labels = imgs.to(args.device), labels.to(args.device)
+
             optimizer.zero_grad()
-            x_encode, x_residue, x_feature, x_latent = model(imgs)
 
-            # 4. 辨識模型特徵提取與 ArcFace 計算
-            outputs = arcface_head(x_feature, labels)
+            # 3. 模型前向傳播：提取特徵與雜湊碼
+            features = feature_extractor(imgs)
+            hash_codes = generator(features, labels, training=True)
 
-            loss, loss_gen, loss_fr, loss_ls = criterion(imgs, x_encode, x_latent, outputs[0], labels)
+            # 4. 通過 ArcFace 分類頭計算 Logits
+            logits_feat = feat_fc(features, labels)
+            logits_hash = hash_fc(hash_codes, labels)
+
+            # 5. 計算損失 (Feature Loss + Hash Loss)
+            loss_feat = criterion(logits_feat, labels)
+            loss_hash = criterion(logits_hash, labels)
+            loss = loss_feat + loss_hash
 
             # 6. 反向傳播與參數更新
             loss.backward()
@@ -73,40 +95,50 @@ def train():
 
             # 記錄 Loss
             total_loss += loss.item()
-            total_loss_gen += loss_gen.item()
-            total_loss_fr += loss_fr.item()
+            total_loss_feat += loss_feat.item()
+            total_loss_hash += loss_hash.item()
 
             pbar.set_postfix({
                 'Loss': f"{loss.item():.4f}",
-                'L_gen': f"{loss_gen.item():.4f}",
-                'L_fr': f"{loss_fr.item():.4f}"
+                'L_feat': f"{loss_feat.item():.4f}",
+                'L_hash': f"{loss_hash.item():.4f}"
             })
             pbar.update(1)
+
             imgs, labels = prefetcher.next()
+
         pbar.close()
-        print(f"Epoch [{epoch + 1}/{epochs}] - Avg Loss: {total_loss / len(train_loader):.4f} "
-              f"| Avg L_gen: {total_loss_gen / len(train_loader):.4f} "
-              f"| Avg L_fr: {total_loss_fr / len(train_loader):.4f}")
+
+        # 每個 Epoch 結束後顯示平均 Loss
+        avg_loss = total_loss / len(train_loader)
+        print(f"Epoch [{epoch + 1}/{args.epochs}] - Avg Loss: {avg_loss:.4f} "
+              f"| Avg L_feat: {total_loss_feat / len(train_loader):.4f} "
+              f"| Avg L_hash: {total_loss_hash / len(train_loader):.4f}")
 
         # save model weights
-        avg_loss = total_loss / len(train_loader)
         if avg_loss < best_loss:
             best_loss = avg_loss
             print(f"--> find new Loss ({best_loss:.4f}) Saving...")
-            os.makedirs('weights', exist_ok=True)
-            torch.save(arcface_head.state_dict(), 'weights/best_arcface_head.pth')
-            torch.save(model.generator.state_dict(), 'weights/best_generator.pth')
-            torch.save(model.recognizer.state_dict(), 'weights/best_recognizer.pth')
+            save_dir = 'weights/fsb_hashnet'
+            os.makedirs(save_dir, exist_ok=True)
+
+            torch.save(feature_extractor.state_dict(), os.path.join(save_dir, 'best_feature_extractor.pth'))
+            torch.save(generator.state_dict(), os.path.join(save_dir, 'best_generator.pth'))
+            torch.save(feat_fc.state_dict(), os.path.join(save_dir, 'best_feat_fc.pth'))
+            torch.save(hash_fc.state_dict(), os.path.join(save_dir, 'best_hash_fc.pth'))
 
 
 if __name__ == '__main__':
     args = configs.get_all_params()
-    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # --- 加入原本 params.py 中的網路結構超參數 ---
+    args.dim = 1024
+    args.hash_dim = 512
+    args.dropout = 0.1
+    args.epochs = 40  # 可以覆蓋 configs 的設定
+
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
-    epochs = 25
-    args.mode = "stage1"
-    train()
-    epochs = 30
-    args.mode = "stage2"
-    train()
+
+    # 開始訓練
+    train(args)

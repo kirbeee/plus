@@ -5,10 +5,10 @@ from tqdm import tqdm
 import sklearn.metrics as skm
 import configs
 import datasets
-from model.model import MinusBackbone
+from network.model import MinusBackbone
 import torch.nn.functional as F
 import testkit.attacker as attacker
-from model.utils import UNet
+from network.utils import UNet
 import os
 from testkit.unlinkability_metric import UnlinkabilityMetric
 

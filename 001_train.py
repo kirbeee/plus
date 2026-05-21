@@ -131,7 +131,6 @@ if __name__ == '__main__':
     args.dim = 1024
     args.hash_dim = 512
     args.dropout = 0.1
-    args.epochs = 40  # 可以覆蓋 configs 的設定
 
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)

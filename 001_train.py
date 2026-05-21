@@ -67,7 +67,6 @@ def train(args):
 
         imgs, labels = prefetcher.next()
         while imgs is not None:
-            # 確保資料在正確的裝置上
             imgs, labels = imgs.to(args.device), labels.to(args.device)
 
             optimizer.zero_grad()

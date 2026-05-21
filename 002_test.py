@@ -104,7 +104,7 @@ def run_test(args):
     hash_renewed = torch.cat(hash_renewed_list, dim=0)
     labels = torch.cat(labels_list, dim=0)
 
-    print("\n[2/3] 計算安全與驗證指標 (EER)...")
+    # EER
     # --- 1. User-Specific 驗證 ---
     user_gen_scores, user_imp_scores = get_pairwise_scores(hash_user, hash_user, labels)
     user_eer = compute_eer(user_gen_scores, user_imp_scores)
@@ -113,8 +113,8 @@ def run_test(args):
     stolen_gen_scores, stolen_imp_scores = get_pairwise_scores(hash_stolen, hash_stolen, labels)
     stolen_eer = compute_eer(stolen_gen_scores, stolen_imp_scores)
 
-    print("\n[3/3] 呼叫官方套件計算不可連結性 (Unlinkability D_sys)...")
-    # --- 3. 不可連結性 (Unlinkability / Revocability) ---
+    # Unlinkability
+    # --- 1. 不可連結性 (Unlinkability / Revocability) ---
     sim_matrix_cross = torch.mm(
         torch.nn.functional.normalize(hash_user, p=2, dim=1),
         torch.nn.functional.normalize(hash_renewed, p=2, dim=1).t()
@@ -125,16 +125,16 @@ def run_test(args):
 
     mated_scores = sim_matrix_cross[label_matrix == 1]
     non_mated_scores = sim_matrix_cross[label_matrix == 0]
+    print(f"Mated pairs: {len(mated_scores)}, Non-Mated pairs: {len(non_mated_scores)}")
 
-    # --- 準備匯出目錄 ---
+    # prepare dir
     out_dir = './graphs/analysis_privacy_security/fsb_hashnet'
     os.makedirs(out_dir, exist_ok=True)
 
-    # 直接呼叫你提供的 UnlinkabilityMetric 類別
     metric = UnlinkabilityMetric(mated_scores, non_mated_scores)
     dsys = metric.evaluate()
 
-    # 自動匯出分析圖表
+    # make plot
     fig_path = os.path.join(out_dir, 'image_unlinkability.pdf')
     metric.plot(figure_file=fig_path)
 

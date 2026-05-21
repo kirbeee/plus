@@ -14,8 +14,8 @@ from testkit.unlinkability_metric import UnlinkabilityMetric
 
 def load_backbone(args):
     model = MinusBackbone(mode=args.mode).to(args.device)
-    gen_path = 'weights/best_generator.pth'
-    rec_path = 'weights/best_recognizer.pth'
+    gen_path = 'weights/minusface/best_generator.pth'
+    rec_path = 'weights/minusface/best_recognizer.pth'
     model.generator.load_state_dict(torch.load(gen_path, map_location=args.device))
     model.recognizer.load_state_dict(torch.load(rec_path, map_location=args.device))
     model.eval()

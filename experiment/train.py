@@ -28,8 +28,8 @@ def tensor_to_np(tensor, is_residue=False):
     return img
 
 def visualize_stages():
-    gen_path = '../weights/best_generator.pth'
-    rec_path = '../weights/best_recognizer.pth'
+    gen_path = '../weights/minusface/best_generator.pth'
+    rec_path = '../weights/minusface/best_recognizer.pth'
 
     # 2. 載入單一影像樣本
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')

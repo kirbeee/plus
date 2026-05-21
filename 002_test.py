@@ -95,49 +95,61 @@ def unlinkability_calculation(args, model, test_loader, version="shuffled"):
     non_mated_scores = []
 
     # 每張圖只產生一次 residue，但 shuffle 兩次（不同 θ）
-    all_templates_A = []  # 第一次 shuffle
+    all_templates_A = []
+    all_templates_B = []
     targets_list = []
 
     with torch.no_grad():
         for imgs, labels in tqdm(test_loader, desc="Unlinkability Calculation"):
             imgs = imgs.to(args.device)
+
             if version == "shuffled": # 取得 residue（只算一次，節省計算）
                 _, _, _, _, _, x_residue_up = model.obtain_residue(imgs)
                 xp_A = model.shuffle(x_residue_up)   # θ_1
                 feat_A = F.normalize(xp_A.view(xp_A.size(0), -1), p=2, dim=1)
+                # change keys
+                xp_B = model.shuffle(x_residue_up)
+                feat_B = F.normalize(xp_B.view(xp_B.size(0), -1), p=2, dim=1)
             elif version == "non shuffled":
                 _, xp_A, _, _ = model(imgs)
                 feat_A = F.normalize(xp_A.view(xp_A.size(0), -1), p=2, dim=1)
+                feat_B = feat_A
             elif version == "embeding":
                 _, _, feat_A, _ = model(imgs)
                 feat_A = F.normalize(feat_A, p=2, dim=1)
+                feat_B = feat_A
+
             all_templates_A.append(feat_A.cpu())
+            all_templates_B.append(feat_B.cpu())
             targets_list.append(labels.cpu())
 
     templates_A = torch.cat(all_templates_A, dim=0)  # (N, D)
+    templates_B = torch.cat(all_templates_B, dim=0)  # (N, D)
     targets = torch.cat(targets_list, dim=0)          # (N,)
+
+    # --- 計算 Cross-Similarity Matrix ---
+    # (N, D) @ (D, N) -> (N, N)
+    # 矩陣中的 (i, j) 代表第 i 張圖用 θ_1 保護後，與第 j 張圖用 θ_2 保護後的相似度
+    sim_matrix_cross = torch.mm(templates_A, templates_B.t()).numpy()
+
+    # 建立標籤矩陣 (N, N), 1 表示身分相同，0 表示身分不同
     targets_np = targets.numpy()
-    N = len(targets_np)
+    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
 
-    # --- Mated pairs ---
-    for i in range(N//2):
-        score = torch.dot(templates_A[2*i], templates_A[2*i+1])  # 同一個人的兩張圖
-        mated_scores.append(score)
+    # --- 提取 Mated 與 Non-Mated pairs ---
+    # Mated scores: 身分相同 (label_matrix == 1)，但分別來自 A (θ_1) 與 B (θ_2)
+    mated_scores = sim_matrix_cross[label_matrix == 1]
 
-    # --- Non-mated pairs ---
-    for i in range(N):
-        for j in range(i + 2, N):
-            score = torch.dot(templates_A[i], templates_A[j])
-            non_mated_scores.append(score)
-
-    mated_scores = np.array(mated_scores)
-    non_mated_scores = np.array(non_mated_scores)
+    # Non-Mated scores: 身分不同 (label_matrix == 0)，且分別來自 A (θ_1) 與 B (θ_2)
+    non_mated_scores = sim_matrix_cross[label_matrix == 0]
 
     print(f"Mated pairs: {len(mated_scores)}, Non-Mated pairs: {len(non_mated_scores)}")
 
+    # 評估不可連結性
     metric = UnlinkabilityMetric(mated_scores, non_mated_scores)
     dsys_score = metric.evaluate()
     metric.plot(figure_file="unlinkability_dist.png")
+
     return dsys_score
 
 def main():

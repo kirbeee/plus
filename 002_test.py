@@ -63,6 +63,32 @@ def get_pairwise_scores(embeds_A, embeds_B, labels):
 
     return same_id_scores, diff_id_scores
 
+def compute_unlinkability(labels, hash_user, hash_renewed):
+    # --- 1. 不可連結性 (Unlinkability / Revocability) ---
+    sim_matrix_cross = torch.mm(
+        torch.nn.functional.normalize(hash_user, p=2, dim=1),
+        torch.nn.functional.normalize(hash_renewed, p=2, dim=1).t()
+    ).numpy()
+
+    targets_np = labels.numpy()
+    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
+
+    mated_scores = sim_matrix_cross[label_matrix == 1]
+    non_mated_scores = sim_matrix_cross[label_matrix == 0]
+    print(f"Mated pairs: {len(mated_scores)}, Non-Mated pairs: {len(non_mated_scores)}")
+
+    # prepare dir
+    out_dir = './graphs/analysis_privacy_security/fsb_hashnet'
+    os.makedirs(out_dir, exist_ok=True)
+
+    metric = UnlinkabilityMetric(mated_scores, non_mated_scores)
+    dsys = metric.evaluate()
+
+    # make plot
+    fig_path = os.path.join(out_dir, 'image_unlinkability.pdf')
+    metric.plot(figure_file=fig_path)
+
+    return dsys
 
 def run_test(args):
     # --- data loading ---
@@ -114,42 +140,13 @@ def run_test(args):
     stolen_eer = compute_eer(stolen_gen_scores, stolen_imp_scores)
 
     # Unlinkability
-    # --- 1. 不可連結性 (Unlinkability / Revocability) ---
-    sim_matrix_cross = torch.mm(
-        torch.nn.functional.normalize(hash_user, p=2, dim=1),
-        torch.nn.functional.normalize(hash_renewed, p=2, dim=1).t()
-    ).numpy()
-
-    targets_np = labels.numpy()
-    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
-
-    mated_scores = sim_matrix_cross[label_matrix == 1]
-    non_mated_scores = sim_matrix_cross[label_matrix == 0]
-    print(f"Mated pairs: {len(mated_scores)}, Non-Mated pairs: {len(non_mated_scores)}")
-
-    # prepare dir
-    out_dir = './graphs/analysis_privacy_security/fsb_hashnet'
-    os.makedirs(out_dir, exist_ok=True)
-
-    metric = UnlinkabilityMetric(mated_scores, non_mated_scores)
-    dsys = metric.evaluate()
-
-    # make plot
-    fig_path = os.path.join(out_dir, 'image_unlinkability.pdf')
-    metric.plot(figure_file=fig_path)
-
-    # 儲存分數，確保相容性
-    np.savetxt(os.path.join(out_dir, 'genuine.txt'), user_gen_scores)
-    np.savetxt(os.path.join(out_dir, 'imposter.txt'), user_imp_scores)
-    np.savetxt(os.path.join(out_dir, 'mated.txt'), mated_scores)
-    np.savetxt(os.path.join(out_dir, 'nonmated.txt'), non_mated_scores)
+    d_sys = compute_unlinkability(labels, hash_user, hash_renewed)
 
     # --- 輸出最終結果 ---
     print(f"\n================ FSB-HashNet 評估結果 ================")
     print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
     print(f"2. 驗證效能 (Stolen Token EER)        : {stolen_eer * 100:.4f}%")
-    print(f"3. 系統不可連結性 (Unlinkability D_sys): {dsys:.4f}")
-    print(f"plot save to: {fig_path}。")
+    print(f"3. 系統不可連結性 (Unlinkability D_sys): {d_sys:.4f}")
     print(f"======================================================")
 
 

@@ -6,15 +6,12 @@ import torch.optim as optim
 from tqdm import tqdm
 
 import configs
-import datasets  # 沿用你的 datasets.py
+import datasets
 from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
 from network.logits import ArcFace
 
 
 def train(args):
-    # --- hyperparameter ---
-    configs.setup_seed(args.seed)
-
     # --- data loading ---
     train_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='train')
     train_loader = DataLoader(
@@ -26,7 +23,6 @@ def train(args):
         pin_memory=True,
         drop_last=True
     )
-    # 動態取得類別數量
     num_classes = len(set(item['label'] for item in train_dataset.data))
     print(f"總訓練樣本數: {len(train_dataset)}, 總類別數: {num_classes}")
 

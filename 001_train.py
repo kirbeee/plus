@@ -39,15 +39,12 @@ def train(args):
         args.device)
 
     # --- Optimizer & Criterion ---
-    # 針對不同的網路元件設定學習率 (FC 層通常需要較大的學習率)
     optimizer = optim.AdamW([
         {'params': feature_extractor.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay},
         {'params': generator.parameters(), 'lr': args.lr, 'weight_decay': args.weight_decay},
         {'params': feat_fc.parameters(), 'lr': args.lr * 10, 'weight_decay': args.weight_decay},
         {'params': hash_fc.parameters(), 'lr': args.lr * 10, 'weight_decay': args.weight_decay}
     ])
-
-    # 使用標準的 CrossEntropyLoss 來處理 ArcFace 的輸出
     criterion = nn.CrossEntropyLoss().to(args.device)
 
     # --- 訓練迴圈 ---
@@ -71,20 +68,20 @@ def train(args):
 
             optimizer.zero_grad()
 
-            # 3. 模型前向傳播：提取特徵與雜湊碼
+            #  模型前向傳播：提取特徵與雜湊碼
             features = feature_extractor(imgs)
             hash_codes = generator(features, labels, training=True)
 
-            # 4. 通過 ArcFace 分類頭計算 Logits
+            #  通過 ArcFace 分類頭計算 Logits
             logits_feat = feat_fc(features, labels)
             logits_hash = hash_fc(hash_codes, labels)
 
-            # 5. 計算損失 (Feature Loss + Hash Loss)
+            #  計算損失 (Feature Loss + Hash Loss)
             loss_feat = criterion(logits_feat, labels)
             loss_hash = criterion(logits_hash, labels)
             loss = loss_feat + loss_hash
 
-            # 6. 反向傳播與參數更新
+            #  反向傳播與參數更新
             loss.backward()
             optimizer.step()
 
@@ -99,7 +96,6 @@ def train(args):
                 'L_hash': f"{loss_hash.item():.4f}"
             })
             pbar.update(1)
-
             imgs, labels = prefetcher.next()
 
         pbar.close()
@@ -126,7 +122,7 @@ def train(args):
 if __name__ == '__main__':
     args = configs.get_all_params()
 
-    # --- 加入原本 params.py 中的網路結構超參數 ---
+    # --- add params  ---
     args.dim = 1024
     args.hash_dim = 512
     args.dropout = 0.1
@@ -134,5 +130,4 @@ if __name__ == '__main__':
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
 
-    # 開始訓練
     train(args)

@@ -13,24 +13,23 @@ from testkit.unlinkability_metric import UnlinkabilityMetric
 
 
 def load_models(args):
-    """載入訓練好的 Feature Extractor 與 Hash Generator 權重"""
-    fe = FSB_Hash_Net(embedding_size=args.dim, do_prob=0.0).to(args.device)
-    gen = Hash_Generator(embedding_size=args.dim, do_prob=0.0, device=args.device, out_embedding_size=args.hash_dim).to(
+    feature_extractor = FSB_Hash_Net(embedding_size=args.dim, do_prob=0.0).to(args.device)
+    hash_generator = Hash_Generator(embedding_size=args.dim, do_prob=0.0, device=args.device, out_embedding_size=args.hash_dim).to(
         args.device)
 
     fe_path = 'weights/fsb_hashnet/best_feature_extractor.pth'
     gen_path = 'weights/fsb_hashnet/best_generator.pth'
 
     if os.path.exists(fe_path) and os.path.exists(gen_path):
-        fe.load_state_dict(torch.load(fe_path, map_location=args.device))
-        gen.load_state_dict(torch.load(gen_path, map_location=args.device))
-        print("成功載入 FSB-HashNet 模型權重！")
+        feature_extractor.load_state_dict(torch.load(fe_path, map_location=args.device))
+        hash_generator.load_state_dict(torch.load(gen_path, map_location=args.device))
+        print("load model")
     else:
-        print("警告: 找不到模型權重，請確認 weights/fsb_hashnet/ 目錄下是否有 .pth 檔案。")
+        print("no model find! check weights/fsb_hashnet/ dir")
 
-    fe.eval()
-    gen.eval()
-    return fe, gen
+    feature_extractor.eval()
+    hash_generator.eval()
+    return feature_extractor, hash_generator
 
 
 def compute_eer(genuine_scores, imposter_scores):
@@ -96,7 +95,7 @@ def run_test(args):
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
     # --- model initialize ---
-    fe, gen = load_models(args)
+    feature_extractor, hash_generator = load_models(args)
 
     print("\n[1/3] 提取指靜脈測試集特徵與生成雜湊碼 (Hash Codes)...")
     hash_user_list = []
@@ -109,16 +108,13 @@ def run_test(args):
             imgs, labels = imgs.to(args.device), labels.to(args.device)
 
             # 1. Base 特徵
-            features = fe(imgs)
-
+            features = feature_extractor(imgs)
             # 2. User-Specific Token (正常註冊)
-            h_user = gen(features, labels, training=False)
-
+            h_user = hash_generator(features, labels, training=False)
             # 3. Stolen Token (雜湊金鑰遭竊，假設攻擊者使用全0 Token)
-            h_stolen = gen(features, torch.zeros_like(labels), training=False)
-
+            h_stolen = hash_generator(features, torch.zeros_like(labels), training=False)
             # 4. Renewed Token (使用者註銷舊金鑰並重新配發)
-            h_renewed = gen(features, labels + 1000, training=False)
+            h_renewed = hash_generator(features, labels + 1000, training=False)
 
             hash_user_list.append(h_user.cpu())
             hash_stolen_list.append(h_stolen.cpu())
@@ -156,5 +152,4 @@ if __name__ == '__main__':
     args.hash_dim = 512
     args.datasets = "PLUSVein-FV3"
     args = configs.get_dataset_params(args)
-
     run_test(args)

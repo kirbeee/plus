@@ -149,9 +149,8 @@ def run_test(args):
     print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
     print(f"2. 驗證效能 (Stolen Token EER)        : {stolen_eer * 100:.4f}%")
     print(f"3. 系統不可連結性 (Unlinkability D_sys): {dsys:.4f}")
+    print(f"plot save to: {fig_path}。")
     print(f"======================================================")
-    print(f"[Info] 不可連結性分析圖表已自動匯出至 {fig_path}。")
-    print(f"[Info] 所有特徵分數已存至 {out_dir} 目錄。")
 
 
 if __name__ == '__main__':

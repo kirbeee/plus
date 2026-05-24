@@ -1,10 +1,11 @@
 .idea/
-PLUSVein-FV3.zip
 datasets/PLUSVein-FV3/
 datasets/UTFVP
 datasets/FV-USM
 __pycache__/
 .DS_Store
 weights/
-annotations_plusvein.pkl
+datasets/annotations_plusvein.pkl
+datasets/annotations_fvusm.pkl
+datasets/annotations_utfvp.pkl
 unlinkability_dist.png

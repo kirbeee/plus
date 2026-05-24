@@ -142,3 +142,7 @@ if __name__ == '__main__':
     args.datasets = 'UTFVP'
     args = configs.get_dataset_params(args)
     create_UTFVP_annotation(args)
+
+    args.datasets = 'PLUSVein-FV3'
+    args = configs.get_dataset_params(args)
+    create_PLUSVein_annotation(args)

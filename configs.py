@@ -25,9 +25,9 @@ def get_dataset_params(args):
         args.classes = 360
         args.pad_height_width = 736
         args.data_type = ['LED', 'LASER']
-        args.data_root = args.dataset_root + '/datasets/PLUSVein-FV3/PLUSVein-FV3-ROI_combined/ROI'
+        args.data_root = args.dataset_root + '/PLUSVein-FV3/PLUSVein-FV3-ROI_combined/ROI'
         args.root_model = './checkpoint/PLUSVein-FV3'
-        args.annot_file = 'annotations_plusvein.pkl'
+        args.annot_file = 'datasets/annotations_plusvein.pkl'
     elif args.datasets == 'UTFVP':
         args.split = '1:3'
         args.classes = 360

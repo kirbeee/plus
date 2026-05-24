@@ -32,7 +32,7 @@ def get_dataset_params(args):
 
 def get_optim_params(args):
     if args.optim == 'adamw':
-        args.lr = 2e-3
+        args.lr = 2e-4
         args.weight_decay = 1e-2
     if args.optim == 'sgd':
         args.lr = 1e-1

@@ -1,7 +1,8 @@
 .idea/
 PLUSVein-FV3.zip
-PLUSVein-FV3/
-Privacy-Preserving_Face_Recognition_Using_Trainable_Feature_Subtraction.pdf
+datasets/PLUSVein-FV3/
+datasets/UTFVP
+datasets/FV-USM
 __pycache__/
 .DS_Store
 weights/

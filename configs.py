@@ -13,7 +13,7 @@ def get_basic_params():
     parser.add_argument('--img_size', type=int, default=112)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--workers', type=int, default=8)
-    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--epochs', type=int, default=15)
     parser.add_argument('--seed', type=int, default=123)
     return parser.parse_args([])
 

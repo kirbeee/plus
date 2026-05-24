@@ -1,4 +1,6 @@
 import os
+import random
+
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
@@ -112,9 +114,10 @@ def run_test(args):
             # 2. User-Specific Token (正常註冊)
             h_user = hash_generator(features, labels, training=False)
             # 3. Stolen Token (雜湊金鑰遭竊，假設攻擊者使用全0 Token)
-            h_stolen = hash_generator(features, torch.zeros_like(labels), training=False)
+            h_stolen = hash_generator(features, 0, training=False)
             # 4. Renewed Token (使用者註銷舊金鑰並重新配發)
-            h_renewed = hash_generator(features, labels + 1000, training=False)
+            random_offset = random.randint(1, 10000)
+            h_renewed = hash_generator(features, labels + random_offset , training=False)
 
             hash_user_list.append(h_user.cpu())
             hash_stolen_list.append(h_stolen.cpu())

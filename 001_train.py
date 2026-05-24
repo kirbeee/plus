@@ -121,13 +121,12 @@ def train(args):
 
 if __name__ == '__main__':
     args = configs.get_all_params()
-
     # --- add params  ---
     args.dim = 1024
     args.hash_dim = 512
     args.dropout = 0.1
-
-    args.datasets = "PLUSVein-FV3"
-    args = configs.get_dataset_params(args)
-
-    train(args)
+    # -------------------
+    for dataset in ['FV-USM', 'PLUSVein-FV3', 'UTFVP']:
+        args.dataset = dataset
+        args = configs.get_dataset_params(args)
+        train(args)

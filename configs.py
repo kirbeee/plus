@@ -19,14 +19,31 @@ def get_basic_params():
 
 
 def get_dataset_params(args):
+    args.dataset_root = '/mnt/c/Users/msp/Documents/git-repo/plus/datasets'
     if args.datasets == 'PLUSVein-FV3':
         args.split = '3:2'
         args.classes = 360
         args.pad_height_width = 736
         args.data_type = ['LED', 'LASER']
-        args.data_root = '/mnt/c/Users/msp/Documents/git-repo/plus/PLUSVein-FV3/PLUSVein-FV3-ROI_combined/ROI'
+        args.data_root = args.dataset_root + '/datasets/PLUSVein-FV3/PLUSVein-FV3-ROI_combined/ROI'
         args.root_model = './checkpoint/PLUSVein-FV3'
         args.annot_file = 'annotations_plusvein.pkl'
+    elif args.datasets == 'UTFVP':
+        args.split = '1:3'
+        args.classes = 360
+        args.pad_height_width = 672
+        args.data_type = [None]
+        args.data_root = args.dataset_root + '/UTFVP/data'
+        args.root_model = './checkpoint/UTFVP'
+        args.annot_file = './datasets/annotations_utfvp.pkl'
+    elif args.datasets == 'FV-USM':
+        args.split = '2:1'
+        args.classes = 492
+        args.pad_height_width = 300
+        args.data_type = [None]
+        args.data_root = args.dataset_root + '/FV-USM'
+        args.root_model = './checkpoint/FV-USM'
+        args.annot_file = './datasets/annotations_fvusm.pkl'
     return args
 
 

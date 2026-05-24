@@ -51,10 +51,94 @@ def create_PLUSVein_annotation(args):
     print(f'test_samples: {len(test_samples_LED)}')
     print(test_samples_LED[0])
 
+
+def create_FVUSM_annotation(args):
+    def iter(root, train_samples=[], test_samples=[], sub2classes={}, phase='train'):
+        for sub in tqdm(os.listdir(root)):
+            if not os.path.isdir(os.path.join(root, sub)):
+                continue
+            paths = glob.glob(os.path.join(root, sub, '*.jpg'))
+            random.shuffle(paths)
+
+            train, test = args.split.split(':')
+            ratio = int(test) / (int(train) + int(test))
+            bps = int(len(paths) * ratio)
+            for_test = paths[:bps]
+
+            if sub not in sub2classes:
+                sub2classes[sub] = len(sub2classes)
+
+            for path in paths:
+                if path in for_test:
+                    test_samples.append({'path': path, 'label': sub2classes[sub]})
+                else:
+                    train_samples.append({'path': path, 'label': sub2classes[sub]})
+
+        return train_samples, test_samples, sub2classes
+
+    train_samples, test_samples, sub2classes = iter(os.path.join(args.data_root, '1st_session', 'extractedvein'))
+    train_samples, test_samples, sub2classes = iter(os.path.join(args.data_root, '2nd_session', 'extractedvein'),
+                                                    train_samples, test_samples, sub2classes)
+    pickle.dump({
+        'train_set': train_samples,
+        'test_set': test_samples,
+    }, open(args.annot_file, 'wb'))
+    print(f'train_samples: {len(train_samples)}')
+    print(f'test_samples: {len(test_samples)}')
+    print(test_samples[0])
+
+
+def create_UTFVP_annotation(args):
+    def iter(root_path):
+        sub2classes = {}
+        train_samples, test_samples = [], []
+
+        for sub in tqdm(os.listdir(root_path)):
+            sub_path = os.path.join(root_path, sub)
+
+            if not os.path.isdir(sub_path):
+                continue
+
+            for finger in range(1, 7):
+                paths = glob.glob(os.path.join(sub_path, f'{sub}_{finger}_*.png'))
+
+                random.shuffle(paths)
+
+                train, test = args.split.split(':')
+                ratio = int(test) / (int(train) + int(test))
+                bps = int(len(paths) * ratio)
+                for_test = paths[:bps]
+
+                if not f'{sub}_{finger}' in sub2classes:
+                    sub2classes[f'{sub}_{finger}'] = len(sub2classes)
+
+                for path in paths:
+                    if path in for_test:
+                        test_samples.append({'path': path, 'label': sub2classes[f'{sub}_{finger}']})
+                    else:
+                        train_samples.append({'path': path, 'label': sub2classes[f'{sub}_{finger}']})
+
+        return train_samples, test_samples
+
+    train_samples, test_samples = iter(args.data_root)
+    pickle.dump({
+        'train_set': train_samples,
+        'test_set': test_samples,
+    }, open(args.annot_file, 'wb'))
+
+    print(f'train_samples: {len(train_samples)}')
+    print(f'test_samples: {len(test_samples)}')
+    print(train_samples[0])
+
+
 if __name__ == '__main__':
     args = configs.get_all_params()
     configs.setup_seed(args.seed)
-    args.datasets = 'PLUSVein-FV3'
-    args = configs.get_dataset_params(args)
-    create_PLUSVein_annotation(args)
 
+    args.datasets = 'FV-USM'
+    args = configs.get_dataset_params(args)
+    create_FVUSM_annotation(args)
+
+    args.datasets = 'UTFVP'
+    args = configs.get_dataset_params(args)
+    create_UTFVP_annotation(args)

@@ -1,6 +1,4 @@
 import os
-import random
-
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
@@ -92,66 +90,69 @@ def compute_unlinkability(labels, hash_user, hash_renewed):
     return dsys
 
 def run_test(args):
-    # --- data loading ---
-    test_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='test')
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+    configs.setup_seed(args.seed)
+    for data_type in args.data_type:
+        # --- data loading ---
+        test_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='test')
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
-    # --- model initialize ---
-    feature_extractor, hash_generator = load_models(args)
+        # --- model initialize ---
+        feature_extractor, hash_generator = load_models(args)
 
-    print("\n[1/3] 提取指靜脈測試集特徵與生成雜湊碼 (Hash Codes)...")
-    hash_user_list = []
-    hash_stolen_list = []
-    hash_renewed_list = []
-    labels_list = []
+        print("\n[1/3] 提取指靜脈測試集特徵與生成雜湊碼 (Hash Codes)...")
+        hash_user_list = []
+        hash_stolen_list = []
+        hash_renewed_list = []
+        labels_list = []
 
-    with torch.no_grad():
-        for imgs, labels in tqdm(test_loader, desc="Feature Extraction"):
-            imgs, labels = imgs.to(args.device), labels.to(args.device)
+        with torch.no_grad():
+            for imgs, labels in tqdm(test_loader, desc="Feature Extraction"):
+                imgs, labels = imgs.to(args.device), labels.to(args.device)
 
-            # 1. Base 特徵
-            features = feature_extractor(imgs)
-            # 2. User-Specific Token (正常註冊)
-            h_user = hash_generator(features, labels, training=False)
-            # 3. Stolen Token (雜湊金鑰遭竊，假設攻擊者使用全0 Token)
-            h_stolen = hash_generator(features, torch.zeros_like(labels), training=False)
-            # 4. Renewed Token (使用者註銷舊金鑰並重新配發)
-            h_renewed = hash_generator(features, labels + 10000 , training=False)
+                # 1. Base 特徵
+                features = feature_extractor(imgs)
+                # 2. User-Specific Token (正常註冊)
+                h_user = hash_generator(features, labels, training=False)
+                # 3. Stolen Token (雜湊金鑰遭竊，假設攻擊者使用全0 Token)
+                h_stolen = hash_generator(features, torch.zeros_like(labels), training=False)
+                # 4. Renewed Token (使用者註銷舊金鑰並重新配發)
+                h_renewed = hash_generator(features, labels + 10000 , training=False)
 
-            hash_user_list.append(h_user.cpu())
-            hash_stolen_list.append(h_stolen.cpu())
-            hash_renewed_list.append(h_renewed.cpu())
-            labels_list.append(labels.cpu())
+                hash_user_list.append(h_user.cpu())
+                hash_stolen_list.append(h_stolen.cpu())
+                hash_renewed_list.append(h_renewed.cpu())
+                labels_list.append(labels.cpu())
 
-    hash_user = torch.cat(hash_user_list, dim=0)
-    hash_stolen = torch.cat(hash_stolen_list, dim=0)
-    hash_renewed = torch.cat(hash_renewed_list, dim=0)
-    labels = torch.cat(labels_list, dim=0)
+        hash_user = torch.cat(hash_user_list, dim=0)
+        hash_stolen = torch.cat(hash_stolen_list, dim=0)
+        hash_renewed = torch.cat(hash_renewed_list, dim=0)
+        labels = torch.cat(labels_list, dim=0)
 
-    # EER
-    # --- 1. User-Specific 驗證 ---
-    user_gen_scores, user_imp_scores = get_pairwise_scores(hash_user, hash_user, labels)
-    user_eer = compute_eer(user_gen_scores, user_imp_scores)
+        # EER
+        # --- 1. User-Specific 驗證 ---
+        user_gen_scores, user_imp_scores = get_pairwise_scores(hash_user, hash_user, labels)
+        user_eer = compute_eer(user_gen_scores, user_imp_scores)
 
-    # --- 2. Stolen Token 驗證 ---
-    stolen_gen_scores, stolen_imp_scores = get_pairwise_scores(hash_stolen, hash_stolen, labels)
-    stolen_eer = compute_eer(stolen_gen_scores, stolen_imp_scores)
+        # --- 2. Stolen Token 驗證 ---
+        stolen_gen_scores, stolen_imp_scores = get_pairwise_scores(hash_stolen, hash_stolen, labels)
+        stolen_eer = compute_eer(stolen_gen_scores, stolen_imp_scores)
 
-    # Unlinkability
-    d_sys = compute_unlinkability(labels, hash_user, hash_renewed)
+        # Unlinkability
+        d_sys = compute_unlinkability(labels, hash_user, hash_renewed)
 
-    # --- 輸出最終結果 ---
-    print(f"\n================ FSB-HashNet 評估結果 ================")
-    print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
-    print(f"2. 驗證效能 (Stolen Token EER)        : {stolen_eer * 100:.4f}%")
-    print(f"3. 系統不可連結性 (Unlinkability D_sys): {d_sys:.4f}")
-    print(f"======================================================")
+        # --- 輸出最終結果 ---
+        print(f"\n================ FSB-HashNet 評估結果 ================")
+        print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
+        print(f"2. 驗證效能 (Stolen Token EER)        : {stolen_eer * 100:.4f}%")
+        print(f"3. 系統不可連結性 (Unlinkability D_sys): {d_sys:.4f}")
+        print(f"======================================================")
 
 
 if __name__ == '__main__':
     args = configs.get_all_params()
     args.dim = 1024
     args.hash_dim = 512
-    args.datasets = "PLUSVein-FV3"
-    args = configs.get_dataset_params(args)
-    run_test(args)
+    for dataset in ['FV-USM', 'PLUSVein-FV3', 'UTFVP']:
+        args.dataset = dataset
+        args = configs.get_dataset_params(args)
+        run_test(args)

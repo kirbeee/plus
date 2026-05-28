@@ -12,20 +12,20 @@ from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
 from testkit.unlinkability_metric import UnlinkabilityMetric
 
 
-def load_models(args):
+def load_models(args,data_type):
     feature_extractor = FSB_Hash_Net(embedding_size=args.dim, do_prob=0.0).to(args.device)
     hash_generator = Hash_Generator(embedding_size=args.dim, do_prob=0.0, device=args.device, out_embedding_size=args.hash_dim).to(
         args.device)
-
-    fe_path = 'weights/fsb_hashnet/best_feature_extractor.pth'
-    gen_path = 'weights/fsb_hashnet/best_generator.pth'
-
+    save_path = os.path.join(args.root_model, str(data_type))
+    fe_path = os.path.join(save_path, 'best_feature_extractor.pth')
+    gen_path = os.path.join(save_path, 'best_generator.pth')
     if os.path.exists(fe_path) and os.path.exists(gen_path):
         feature_extractor.load_state_dict(torch.load(fe_path, map_location=args.device))
         hash_generator.load_state_dict(torch.load(gen_path, map_location=args.device))
         print("load model")
     else:
-        print("no model find! check weights/fsb_hashnet/ dir")
+        print("no model find! check dir")
+        exit(0)
 
     feature_extractor.eval()
     hash_generator.eval()
@@ -93,11 +93,11 @@ def run_test(args):
     configs.setup_seed(args.seed)
     for data_type in args.data_type:
         # --- data loading ---
-        test_dataset = datasets.ImagesDataset(args=args, data_type='LED', phase='test')
+        test_dataset = datasets.ImagesDataset(args=args, data_type=data_type, phase='test')
         test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
         # --- model initialize ---
-        feature_extractor, hash_generator = load_models(args)
+        feature_extractor, hash_generator = load_models(args,data_type)
 
         print("\n[1/3] 提取指靜脈測試集特徵與生成雜湊碼 (Hash Codes)...")
         hash_user_list = []
@@ -153,6 +153,6 @@ if __name__ == '__main__':
     args.dim = 1024
     args.hash_dim = 512
     for dataset in ['FV-USM', 'PLUSVein-FV3', 'UTFVP']:
-        args.dataset = dataset
+        args.datasets = dataset
         args = configs.get_dataset_params(args)
         run_test(args)

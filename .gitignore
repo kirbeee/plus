@@ -5,6 +5,8 @@ datasets/FV-USM
 __pycache__/
 .DS_Store
 weights/
+checkpoint/
+graphs/
 datasets/annotations_plusvein.pkl
 datasets/annotations_fvusm.pkl
 datasets/annotations_utfvp.pkl

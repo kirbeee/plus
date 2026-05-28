@@ -13,7 +13,7 @@ from network.logits import ArcFace
 
 def train(args):
     configs.setup_seed(args.seed)
-    for data_type in args.datasets:
+    for data_type in args.data_type:
         train_dataset = datasets.ImagesDataset(args=args, data_type=data_type, phase='train')
         train_loader = DataLoader(
             train_dataset,
@@ -115,7 +115,7 @@ def train(args):
                 if not os.path.isdir(save_path):
                     os.makedirs(save_path)
 
-                torch.save(feature_extractor.state_dict(), os.path.join(save_path,str(data_type), 'best_feature_extractor.pth'))
+                torch.save(feature_extractor.state_dict(), os.path.join(save_path, 'best_feature_extractor.pth'))
                 torch.save(generator.state_dict(), os.path.join(save_path, 'best_generator.pth'))
                 torch.save(feat_fc.state_dict(), os.path.join(save_path, 'best_feat_fc.pth'))
                 torch.save(hash_fc.state_dict(), os.path.join(save_path, 'best_hash_fc.pth'))
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     args.hash_dim = 512
     args.dropout = 0.1
     # -------------------
-    for dataset in ['FV-USM', 'PLUSVein-FV3', 'UTFVP']:
-        args.dataset = dataset
+    for dataset in ['FV-USM','PLUSVein-FV3',  'UTFVP']:
+        args.datasets = dataset
         args = configs.get_dataset_params(args)
         train(args)

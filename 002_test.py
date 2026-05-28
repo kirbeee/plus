@@ -58,6 +58,14 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
     eer = np.mean((fpr[min_index], fnr[min_index]))
     eer_rounded = np.around(eer, 4)
 
+    # 計算最佳準確率 (Best Accuracy)
+    P = len(genuine_scores)  # 正樣本總數
+    N = len(imposter_scores)  # 負樣本總數
+    # 利用 TPR = TP/P -> TP = TPR * P ； FPR = FP/N -> TN = (1 - FPR) * N
+    acc_list = (tpr * P + (1 - fpr) * N) / (P + N)
+    best_acc = np.max(acc_list)
+    best_acc_rounded = np.around(best_acc, 4)
+
     # 4. 繪製並儲存 ROC 曲線
     if save_path is not None:
         plt.figure(figsize=(6, 6))
@@ -87,7 +95,7 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
         plt.close()  # 關閉畫布釋放記憶體，避免連續訓練/測試時記憶體洩漏
         print(f"ROC 曲線已成功儲存至: {save_path}")
 
-    return eer_rounded
+    return eer_rounded, best_acc_rounded
 
 
 def get_pairwise_scores(embeds_A, embeds_B, labels):
@@ -172,25 +180,25 @@ def run_test(args):
         hash_renewed = torch.cat(hash_renewed_list, dim=0)
         labels = torch.cat(labels_list, dim=0)
 
-        # EER
         # --- 1. User-Specific 驗證 ---
         user_gen_scores, user_imp_scores = get_pairwise_scores(hash_user, hash_user, labels)
-        user_eer = compute_eer_and_save_roc(user_gen_scores, user_imp_scores, save_path=os.path.join(args.root_model, str(data_type)))
+        user_eer, user_acc = compute_eer_and_save_roc(user_gen_scores, user_imp_scores, save_path=os.path.join(args.root_model, 'user specific'))
 
         # --- 2. Stolen Token 驗證 ---
         stolen_gen_scores, stolen_imp_scores = get_pairwise_scores(hash_stolen, hash_stolen, labels)
-        stolen_eer = compute_eer_and_save_roc(stolen_gen_scores, stolen_imp_scores, save_path=os.path.join(args.root_model, str(data_type)))
+        stolen_eer, stolen_acc = compute_eer_and_save_roc(stolen_gen_scores, stolen_imp_scores, save_path=os.path.join(args.root_model, 'stolen'))
 
         # Unlinkability
-        d_sys = compute_unlinkability(labels, hash_user, hash_renewed, out_dir=os.path.join(args.root_model, str(data_type)))
+        d_sys = compute_unlinkability(labels, hash_user, hash_renewed, out_dir=os.path.join(args.root_model, 'unlinkability'))
 
         # --- 輸出最終結果 ---
         print(f"\n================ FSB-HashNet 評估結果 ================")
         print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
+        print(f"   驗證效能 (User-Specific Token ACC) : {user_acc * 100:.4f}%")  # 新增
         print(f"2. 驗證效能 (Stolen Token EER)        : {stolen_eer * 100:.4f}%")
+        print(f"   驗證效能 (Stolen Token ACC)        : {stolen_acc * 100:.4f}%")  # 新增
         print(f"3. 系統不可連結性 (Unlinkability D_sys): {d_sys:.4f}")
         print(f"======================================================")
-
 
 if __name__ == '__main__':
     args = configs.get_all_params()

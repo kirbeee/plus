@@ -117,9 +117,6 @@ def train(args):
 
                 torch.save(feature_extractor.state_dict(), os.path.join(save_path, 'best_feature_extractor.pth'))
                 torch.save(generator.state_dict(), os.path.join(save_path, 'best_generator.pth'))
-                torch.save(feat_fc.state_dict(), os.path.join(save_path, 'best_feat_fc.pth'))
-                torch.save(hash_fc.state_dict(), os.path.join(save_path, 'best_hash_fc.pth'))
-
 
 if __name__ == '__main__':
     args = configs.get_all_params()

@@ -28,6 +28,7 @@ def get_dataset_params(args):
         args.data_root = args.dataset_root + '/PLUSVein-FV3/PLUSVein-FV3-ROI_combined/ROI'
         args.root_model = './checkpoint/PLUSVein-FV3'
         args.annot_file = 'datasets/annotations_plusvein.pkl'
+        args.eval_root = './evaluate' + args.datasets
     elif args.datasets == 'UTFVP':
         args.split = '1:3'
         args.classes = 360
@@ -36,6 +37,7 @@ def get_dataset_params(args):
         args.data_root = args.dataset_root + '/UTFVP/data'
         args.root_model = './checkpoint/UTFVP'
         args.annot_file = './datasets/annotations_utfvp.pkl'
+        args.eval_root = './evaluate' + args.datasets
     elif args.datasets == 'FV-USM':
         args.split = '2:1'
         args.classes = 492
@@ -44,6 +46,7 @@ def get_dataset_params(args):
         args.data_root = args.dataset_root + '/FV-USM'
         args.root_model = './checkpoint/FV-USM'
         args.annot_file = './datasets/annotations_fvusm.pkl'
+        args.eval_root = './evaluate' + args.datasets
     return args
 
 

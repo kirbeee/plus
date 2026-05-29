@@ -34,9 +34,9 @@ def train(args):
                                    out_embedding_size=args.hash_dim).to(args.device)
 
         # 2. 初始化兩個 ArcFace 分類頭 (一個接特徵、一個接雜湊碼)
-        feat_fc = ArcFace(in_features=args.dim, out_features=num_classes, s=64.0, m=0.35, device=args.device).to(
+        feat_fc = ArcFace(in_features=args.dim, out_features=num_classes, device=args.device).to(
             args.device)
-        hash_fc = ArcFace(in_features=args.hash_dim, out_features=num_classes, s=128.0, m=0.35, device=args.device).to(
+        hash_fc = ArcFace(in_features=args.hash_dim, out_features=num_classes, device=args.device).to(
             args.device)
 
         # --- Optimizer & Criterion ---

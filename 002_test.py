@@ -182,14 +182,14 @@ def run_test(args):
 
         # --- 1. User-Specific 驗證 ---
         user_gen_scores, user_imp_scores = get_pairwise_scores(hash_user, hash_user, labels)
-        user_eer, user_acc = compute_eer_and_save_roc(user_gen_scores, user_imp_scores, save_path=os.path.join(args.root_model, 'user specific'))
+        user_eer, user_acc = compute_eer_and_save_roc(user_gen_scores, user_imp_scores, save_path=os.path.join(args.root_model,str(data_type)))
 
         # --- 2. Stolen Token 驗證 ---
         stolen_gen_scores, stolen_imp_scores = get_pairwise_scores(hash_stolen, hash_stolen, labels)
-        stolen_eer, stolen_acc = compute_eer_and_save_roc(stolen_gen_scores, stolen_imp_scores, save_path=os.path.join(args.root_model, 'stolen'))
+        stolen_eer, stolen_acc = compute_eer_and_save_roc(stolen_gen_scores, stolen_imp_scores, save_path=os.path.join(args.root_model))
 
         # Unlinkability
-        d_sys = compute_unlinkability(labels, hash_user, hash_renewed, out_dir=os.path.join(args.root_model, 'unlinkability'))
+        d_sys = compute_unlinkability(labels, hash_user, hash_renewed, out_dir=os.path.join(args.root_model))
 
         # --- 輸出最終結果 ---
         print(f"\n================ FSB-HashNet 評估結果 ================")

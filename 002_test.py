@@ -56,7 +56,6 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
     fnr = 1 - tpr
     min_index = np.argmin(np.abs(fpr - fnr))
     eer = np.mean((fpr[min_index], fnr[min_index]))
-    eer_rounded = np.around(eer, 4)
 
     # 計算最佳準確率 (Best Accuracy)
     P = len(genuine_scores)  # 正樣本總數
@@ -64,7 +63,6 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
     # 利用 TPR = TP/P -> TP = TPR * P ； FPR = FP/N -> TN = (1 - FPR) * N
     acc_list = (tpr * P + (1 - fpr) * N) / (P + N)
     best_acc = np.max(acc_list)
-    best_acc_rounded = np.around(best_acc, 4)
 
     # 4. 繪製並儲存 ROC 曲線
     if save_path is not None:
@@ -77,7 +75,7 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
         plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
 
         # 標記出 EER 的工作點 (FPR, TPR = 1 - FNR)
-        plt.plot(fpr[min_index], tpr[min_index], 'ro', label=f'EER = {eer_rounded:.4f}')
+        plt.plot(fpr[min_index], tpr[min_index], 'ro', label=f'EER = {eer:.4f}')
 
         # 設定圖表標籤與範圍
         plt.xlim([0.0, 1.0])
@@ -95,7 +93,7 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
         plt.close()  # 關閉畫布釋放記憶體，避免連續訓練/測試時記憶體洩漏
         print(f"ROC 曲線已成功儲存至: {save_path}")
 
-    return eer_rounded, best_acc_rounded
+    return eer, best_acc
 
 
 def get_pairwise_scores(embeds_A, embeds_B, labels):

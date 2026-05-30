@@ -11,11 +11,6 @@ from torch.nn import Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, Sequential
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import sys, os
-sys.path.insert(0, os.path.abspath('.'))
-from network import load_model
-import numpy as np
-
 
 #### Feature Extractor ####
 class Flatten(Module):
@@ -133,7 +128,7 @@ class PFE_Block(nn.Module):
 class FSB_Hash_Net(Module):   
     def __init__(self, embedding_size=1024, do_prob=0.0, out_h=7, out_w=7):
         super(FSB_Hash_Net, self).__init__()
-        self.conv1 = Conv_block(3, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.conv1 = Conv_block(3, 64, kernel=(1, 1), stride=(1, 1), padding=(0, 0))
         self.conv2_dw = Conv_block(64, 64, kernel=(3, 3), stride=(1, 1), padding=(1, 1), groups=64)
         self.conv_23 = Depth_Wise(64, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=128)
         self.conv_3 = Residual(64, num_block=4, groups=128, kernel=(3, 3), stride=(1, 1), padding=(1, 1))
@@ -238,13 +233,3 @@ class Hash_Generator(Module):
             return torch.tanh(F.normalize(emb, p=2, dim=1))
         else:
             return torch.sign(F.normalize(emb, p=2, dim=1))
-
-if __name__ == '__main__':
-    device = torch.device('cuda:0')
-    load_model_path_fe = './models/best_feature_extractor/FSB-HashNet.pth'
-    feature_extractor = FSB_Hash_Net(embedding_size = 1024, do_prob = 0.0).eval().to(device)
-    feature_extractor = load_model.load_pretrained_network(feature_extractor, load_model_path_fe, device = device)
-    
-    load_model_path = load_model_path_fe.replace('best_feature_extractor', 'best_generator')
-    hash_generator = Hash_Generator(embedding_size = 1024, device=device, out_embedding_size=512).eval().to(device)
-    hash_generator = load_model.load_pretrained_network(hash_generator, load_model_path, device = device)

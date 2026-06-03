@@ -142,59 +142,87 @@ def compute_unlinkability(labels, hash_user, hash_renewed, out_dir=None):
 def run_test(args):
     configs.setup_seed(args.seed)
     for data_type in args.data_type:
-        # --- data loading ---
         test_dataset = datasets.ImagesDataset(args=args, data_type=data_type, phase='test')
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size,
+                                 shuffle=False, num_workers=args.workers)
 
-        # --- model initialize ---
-        feature_extractor, hash_generator = load_models(args,data_type)
+        # 取得訓練集類別數，用來計算 token offset
+        # 訓練 token 範圍: 0 ~ num_train_classes-1
+        # 測試 token 必須完全在此範圍之外
+        train_dataset_tmp = datasets.ImagesDataset(args=args, data_type=data_type, phase='train')
+        num_train_classes = len(set(item['label'] for item in train_dataset_tmp.data))
+        del train_dataset_tmp
+        print(f"訓練類別數: {num_train_classes}, Token offset 起點: {num_train_classes}")
 
-        print("\n[1/3] 提取指靜脈測試集特徵與生成雜湊碼 (Hash Codes)...")
-        hash_user_list = []
-        hash_stolen_list = []
-        hash_renewed_list = []
-        labels_list = []
+        # ---------------------------------------------------------------
+        # Token 設計（論文 Section III-C）
+        # 訓練: token = label (0 ~ N-1)
+        # 測試: token 必須與訓練完全不同，才能驗證零樣本泛化能力
+        #
+        # USER   token: labels + offset_1  → 每位使用者有唯一 token
+        # STOLEN token: 固定錯誤值         → 攻擊者不知道正確 token
+        # RENEWED token: labels + offset_2 → 撤銷舊 token 後重新配發
+        # ---------------------------------------------------------------
+        OFFSET_USER    = num_train_classes + 10000
+        OFFSET_RENEWED = num_train_classes + 20000
+        STOLEN_TOKEN   = num_train_classes + 99999  # 固定錯誤 token（非 0，避免與 label=0 混淆）
+
+        feature_extractor, hash_generator = load_models(args, data_type)
+
+        hash_user_list, hash_stolen_list, hash_renewed_list, labels_list = [], [], [], []
 
         with torch.no_grad():
             for imgs, labels in tqdm(test_loader, desc="Feature Extraction"):
                 imgs, labels = imgs.to(args.device), labels.to(args.device)
-
-                # 1. Base 特徵
                 features = feature_extractor(imgs)
-                # 2. User-Specific Token (正常註冊)
-                h_user = hash_generator(features, labels, training=False)
-                # 3. Stolen Token (雜湊金鑰遭竊，假設攻擊者使用全0 Token)
-                h_stolen = hash_generator(features, torch.zeros_like(labels), training=False)
-                # 4. Renewed Token (使用者註銷舊金鑰並重新配發)
-                h_renewed = hash_generator(features, labels + 10000 , training=False)
+
+                # User-Specific Token（核心修正）
+                # 論文: "distinct key sets for training and inference"
+                h_user = hash_generator(features, labels + OFFSET_USER, training=False)
+
+                # Stolen Token：攻擊者對所有人用同一個錯誤 token
+                h_stolen = hash_generator(
+                    features,
+                    torch.full_like(labels, STOLEN_TOKEN),
+                    training=False
+                )
+
+                # Renewed Token：使用者撤銷後取得全新 token
+                h_renewed = hash_generator(features, labels + OFFSET_RENEWED, training=False)
 
                 hash_user_list.append(h_user.cpu())
                 hash_stolen_list.append(h_stolen.cpu())
                 hash_renewed_list.append(h_renewed.cpu())
                 labels_list.append(labels.cpu())
 
-        hash_user = torch.cat(hash_user_list, dim=0)
-        hash_stolen = torch.cat(hash_stolen_list, dim=0)
+        hash_user    = torch.cat(hash_user_list, dim=0)
+        hash_stolen  = torch.cat(hash_stolen_list, dim=0)
         hash_renewed = torch.cat(hash_renewed_list, dim=0)
-        labels = torch.cat(labels_list, dim=0)
+        labels       = torch.cat(labels_list, dim=0)
 
-        # --- 1. User-Specific 驗證 ---
-        user_gen_scores, user_imp_scores = get_pairwise_scores(hash_user, hash_user, labels)
-        user_eer, user_acc = compute_eer_and_save_roc(user_gen_scores, user_imp_scores, save_path=os.path.join(args.root_model,str(data_type)))
+        # 驗證指標（同原本邏輯）
+        user_gen, user_imp = get_pairwise_scores(hash_user, hash_user, labels)
+        user_eer, user_acc = compute_eer_and_save_roc(
+            user_gen, user_imp,
+            save_path=os.path.join(args.root_model, str(data_type), 'roc_user.png')
+        )
 
-        # --- 2. Stolen Token 驗證 ---
-        stolen_gen_scores, stolen_imp_scores = get_pairwise_scores(hash_stolen, hash_stolen, labels)
-        stolen_eer, stolen_acc = compute_eer_and_save_roc(stolen_gen_scores, stolen_imp_scores, save_path=os.path.join(args.root_model))
+        stolen_gen, stolen_imp = get_pairwise_scores(hash_stolen, hash_stolen, labels)
+        stolen_eer, stolen_acc = compute_eer_and_save_roc(
+            stolen_gen, stolen_imp,
+            save_path=os.path.join(args.root_model, str(data_type), 'roc_stolen.png')
+        )
 
-        # Unlinkability
-        d_sys = compute_unlinkability(labels, hash_user, hash_renewed, out_dir=os.path.join(args.root_model))
+        d_sys = compute_unlinkability(
+            labels, hash_user, hash_renewed,
+            out_dir=os.path.join(args.root_model, str(data_type))
+        )
 
-        # --- 輸出最終結果 ---
-        print(f"\n================ FSB-HashNet 評估結果 ================")
+        print(f"\n================ FSB-HashNet 評估結果 [{data_type}] ================")
         print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
-        print(f"   驗證效能 (User-Specific Token ACC) : {user_acc * 100:.4f}%")  # 新增
+        print(f"   驗證效能 (User-Specific Token ACC) : {user_acc * 100:.4f}%")
         print(f"2. 驗證效能 (Stolen Token EER)        : {stolen_eer * 100:.4f}%")
-        print(f"   驗證效能 (Stolen Token ACC)        : {stolen_acc * 100:.4f}%")  # 新增
+        print(f"   驗證效能 (Stolen Token ACC)        : {stolen_acc * 100:.4f}%")
         print(f"3. 系統不可連結性 (Unlinkability D_sys): {d_sys:.4f}")
         print(f"======================================================")
 

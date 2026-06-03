@@ -128,7 +128,7 @@ class PFE_Block(nn.Module):
 class FSB_Hash_Net(Module):   
     def __init__(self, embedding_size=1024, do_prob=0.0, out_h=7, out_w=7):
         super(FSB_Hash_Net, self).__init__()
-        self.conv1 = Conv_block(3, 64, kernel=(1, 1), stride=(1, 1), padding=(0, 0))
+        self.conv1 = Conv_block(3, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1))
         self.conv2_dw = Conv_block(64, 64, kernel=(3, 3), stride=(1, 1), padding=(1, 1), groups=64)
         self.conv_23 = Depth_Wise(64, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=128)
         self.conv_3 = Residual(64, num_block=4, groups=128, kernel=(3, 3), stride=(1, 1), padding=(1, 1))

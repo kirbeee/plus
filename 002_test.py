@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 
 
-def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
+def compute_eer_and_save_roc(genuine_scores, imposter_scores):
     """
     計算 EER 並可選擇性將 ROC 曲線儲存成圖片
     :param genuine_scores: 正樣本（真實匹配）的分數列表/陣列
@@ -50,8 +50,6 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
 
     # 2. 計算 ROC 曲線節點與 AUC
     fpr, tpr, thresholds = roc_curve(y_true, y_scores, pos_label=1)
-    roc_auc = auc(fpr, tpr)
-
 
     # 3. 計算 EER
     fnr = 1 - tpr
@@ -65,35 +63,6 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
     acc_list = (tpr * P + (1 - fpr) * N) / (P + N)
     best_acc = np.max(acc_list)
 
-    # 4. 繪製並儲存 ROC 曲線
-    if save_path is not None:
-        plt.figure(figsize=(6, 6))
-
-        # 畫出 ROC 曲線
-        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.4f})')
-
-        # 畫出 對角對稱線（隨機猜測基證線）
-        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-
-        # 標記出 EER 的工作點 (FPR, TPR = 1 - FNR)
-        plt.plot(fpr[min_index], tpr[min_index], 'ro', label=f'EER = {eer:.4f}')
-
-        # 設定圖表標籤與範圍
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate (FPR)')
-        plt.ylabel('True Positive Rate (TPR)')
-        plt.title('Receiver Operating Characteristic (ROC) Curve')
-        plt.legend(loc="lower right")
-        plt.grid(True, linestyle=':', alpha=0.6)
-
-        # --- 核心儲存步驟 ---
-        # bbox_inches='tight' 可以防止標籤被切到
-        # dpi=300 可以大幅提升圖片清晰度，適合放進論文或報告
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()  # 關閉畫布釋放記憶體，避免連續訓練/測試時記憶體洩漏
-        print(f"ROC 曲線已成功儲存至: {save_path}")
-
     return eer, best_acc
 
 
@@ -102,20 +71,6 @@ def get_pairwise_scores(embeds_A, embeds_B, labels):
     embeds_A = torch.nn.functional.normalize(embeds_A, p=2, dim=1)
     embeds_B = torch.nn.functional.normalize(embeds_B, p=2, dim=1)
     sim_matrix = torch.mm(embeds_A, embeds_B.t()).numpy()
-    # -----------------------
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    user_labels = labels.numpy().tolist()
-    plt.figure(figsize=(8, 6))
-    # annot=True 會在格子裡印出數字，cmap 控制顏色（coolwarm 是藍到紅）
-    sns.heatmap(sim_matrix, annot=True, fmt=".2f", cmap="coolwarm",
-                xticklabels=user_labels, yticklabels=user_labels)
-
-    plt.title("Cosine Similarity Matrix")
-    plt.xlabel("User ID")
-    plt.ylabel("User ID")
-    plt.savefig("cosine_similarity.png", dpi=300, bbox_inches='tight')
-    # -----------------------
     targets_np = labels.numpy()
     label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
 
@@ -217,15 +172,11 @@ def run_test(args):
         # 驗證指標（同原本邏輯）
         user_gen, user_imp = get_pairwise_scores(hash_user, hash_user, labels)
         user_eer, user_acc = compute_eer_and_save_roc(
-            user_gen, user_imp,
-            save_path=os.path.join(args.root_model, str(data_type), 'roc_user.png')
-        )
+            user_gen, user_imp)
 
-        stolen_gen, stolen_imp = get_pairwise_scores(hash_stolen, hash_stolen, labels)
-        stolen_eer, stolen_acc = compute_eer_and_save_roc(
-            stolen_gen, stolen_imp,
-            save_path=os.path.join(args.root_model, str(data_type), 'roc_stolen.png')
-        )
+        # stolen_gen, stolen_imp = get_pairwise_scores(hash_stolen, hash_stolen, labels)
+        # stolen_eer, stolen_acc = compute_eer_and_save_roc(
+        #     stolen_gen, stolen_imp)
 
         d_sys = compute_unlinkability(
             labels, hash_user, hash_renewed,

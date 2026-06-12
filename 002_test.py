@@ -52,6 +52,7 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores, save_path=None):
     fpr, tpr, thresholds = roc_curve(y_true, y_scores, pos_label=1)
     roc_auc = auc(fpr, tpr)
 
+
     # 3. 計算 EER
     fnr = 1 - tpr
     min_index = np.argmin(np.abs(fpr - fnr))
@@ -101,7 +102,20 @@ def get_pairwise_scores(embeds_A, embeds_B, labels):
     embeds_A = torch.nn.functional.normalize(embeds_A, p=2, dim=1)
     embeds_B = torch.nn.functional.normalize(embeds_B, p=2, dim=1)
     sim_matrix = torch.mm(embeds_A, embeds_B.t()).numpy()
+    # -----------------------
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    user_labels = labels.numpy().tolist()
+    plt.figure(figsize=(8, 6))
+    # annot=True 會在格子裡印出數字，cmap 控制顏色（coolwarm 是藍到紅）
+    sns.heatmap(sim_matrix, annot=True, fmt=".2f", cmap="coolwarm",
+                xticklabels=user_labels, yticklabels=user_labels)
 
+    plt.title("Cosine Similarity Matrix")
+    plt.xlabel("User ID")
+    plt.ylabel("User ID")
+    plt.savefig("cosine_similarity.png", dpi=300, bbox_inches='tight')
+    # -----------------------
     targets_np = labels.numpy()
     label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
 

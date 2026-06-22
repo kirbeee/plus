@@ -1,16 +1,13 @@
 import os
 import torch
-import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from sklearn.metrics import roc_curve
-
 import configs
 import datasets
 from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
-
 from testkit.unlinkability_metric import UnlinkabilityMetric
-
+import numpy as np
+from sklearn.metrics import roc_curve
 
 def load_models(args,data_type):
     feature_extractor = FSB_Hash_Net(embedding_size=args.dim, do_prob=0.0).to(args.device)
@@ -31,12 +28,6 @@ def load_models(args,data_type):
     hash_generator.eval()
     return feature_extractor, hash_generator
 
-
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc
-
-
 def compute_eer_and_save_roc(genuine_scores, imposter_scores):
     """
     計算 EER 並可選擇性將 ROC 曲線儲存成圖片
@@ -48,7 +39,7 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores):
     y_true = np.concatenate([np.ones_like(genuine_scores), np.zeros_like(imposter_scores)])
     y_scores = np.concatenate([genuine_scores, imposter_scores])
 
-    # 2. 計算 ROC 曲線節點與 AUC
+    # 2. 計算 ROC 曲線節點與 AUC 這是一個陣列
     fpr, tpr, thresholds = roc_curve(y_true, y_scores, pos_label=1)
 
     # 3. 計算 EER
@@ -65,23 +56,37 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores):
 
     return eer, best_acc
 
+def get_pairwise_scores_split(embeddings, labels):
+    """
+    正確 biometric evaluation：
+    隨機拆成 A / B 兩組，做 cross matching
+    """
+    n = embeddings.shape[0]
+    idx = torch.randperm(n)
 
-def get_pairwise_scores(embeds_A, embeds_B, labels):
-    """計算 Cosine Similarity 並區分 Genuine/Mated 與 Imposter/Non-Mated 分數"""
+    half = n // 2
+    idx_A = idx[:half]
+    idx_B = idx[half:half*2]
+
+    embeds_A = embeddings[idx_A]
+    embeds_B = embeddings[idx_B]
+    labels_A = labels[idx_A]
+    labels_B = labels[idx_B]
+
     embeds_A = torch.nn.functional.normalize(embeds_A, p=2, dim=1)
     embeds_B = torch.nn.functional.normalize(embeds_B, p=2, dim=1)
-    sim_matrix = torch.mm(embeds_A, embeds_B.t()).numpy()
-    targets_np = labels.numpy()
-    label_matrix = (targets_np[:, None] == targets_np[None, :]).astype(int)
 
-    # 排除對角線 (僅用於 EER 驗證；跨 Token 時不排除)
-    mask = np.ones_like(sim_matrix, dtype=bool)
-    np.fill_diagonal(mask, 0)
+    sim_matrix = torch.mm(embeds_A, embeds_B.t()).cpu().numpy()
 
-    same_id_scores = sim_matrix[(label_matrix == 1) & mask]
-    diff_id_scores = sim_matrix[(label_matrix == 0) & mask]
+    labels_A = labels_A.cpu().numpy()
+    labels_B = labels_B.cpu().numpy()
 
-    return same_id_scores, diff_id_scores
+    same = (labels_A[:, None] == labels_B[None, :])
+
+    genuine = sim_matrix[same]
+    imposter = sim_matrix[~same]
+
+    return genuine, imposter
 
 def compute_unlinkability(labels, hash_user, hash_renewed, out_dir=None):
     # --- 1. 不可連結性 (Unlinkability / Revocability) ---
@@ -170,13 +175,12 @@ def run_test(args):
         labels       = torch.cat(labels_list, dim=0)
 
         # 驗證指標（同原本邏輯）
-        user_gen, user_imp = get_pairwise_scores(hash_user, hash_user, labels)
+        user_gen, user_imp = get_pairwise_scores_split(hash_user, labels)
         user_eer, user_acc = compute_eer_and_save_roc(
             user_gen, user_imp)
 
-        # stolen_gen, stolen_imp = get_pairwise_scores(hash_stolen, hash_stolen, labels)
-        # stolen_eer, stolen_acc = compute_eer_and_save_roc(
-        #     stolen_gen, stolen_imp)
+        stolen_gen, stolen_imp = get_pairwise_scores_split(hash_stolen, labels)
+        stolen_eer, stolen_acc = compute_eer_and_save_roc(stolen_gen, stolen_imp)
 
         d_sys = compute_unlinkability(
             labels, hash_user, hash_renewed,

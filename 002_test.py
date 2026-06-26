@@ -9,20 +9,18 @@ from testkit.unlinkability_metric import UnlinkabilityMetric
 import numpy as np
 from sklearn.metrics import roc_curve
 
-def load_models(args,data_type):
+def load_models(args):
     feature_extractor = FSB_Hash_Net(embedding_size=args.dim, do_prob=0.0).to(args.device)
     hash_generator = Hash_Generator(embedding_size=args.dim, do_prob=0.0, device=args.device, out_embedding_size=args.hash_dim).to(
         args.device)
-    save_path = os.path.join(args.root_model, str(data_type))
-    fe_path = os.path.join(save_path, 'best_feature_extractor.pth')
-    gen_path = os.path.join(save_path, 'best_generator.pth')
+    fe_path = os.path.join(args.model_root, f'{args.dataset}_feature_extractor.pth')
+    gen_path = os.path.join(args.model_root,  f'{args.dataset}_best_generator.pth')
     if os.path.exists(fe_path) and os.path.exists(gen_path):
         feature_extractor.load_state_dict(torch.load(fe_path, map_location=args.device))
         hash_generator.load_state_dict(torch.load(gen_path, map_location=args.device))
         print("load model")
     else:
-        print("no model find! check dir")
-        exit(0)
+        raise ModuleNotFoundError
 
     feature_extractor.eval()
     hash_generator.eval()
@@ -57,10 +55,6 @@ def compute_eer_and_save_roc(genuine_scores, imposter_scores):
     return eer, best_acc
 
 def get_pairwise_scores_split(embeddings, labels):
-    """
-    正確 biometric evaluation：
-    隨機拆成 A / B 兩組，做 cross matching
-    """
     n = embeddings.shape[0]
     idx = torch.randperm(n)
 
@@ -113,93 +107,39 @@ def compute_unlinkability(labels, hash_user, hash_renewed, out_dir=None):
 
     return dsys
 
-def run_test(args):
+def main(args):
     configs.setup_seed(args.seed)
-    for data_type in args.data_type:
-        test_dataset = datasets.ImagesDataset(args=args, data_type=data_type, phase='test')
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size,
-                                 shuffle=False, num_workers=args.workers)
+    test_dataset = datasets.ImagesDataset(args=args, phase='test')
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+    feature_extractor, hash_generator = load_models(args)
+    hash_user_list, labels_list = [], []
 
-        # 取得訓練集類別數，用來計算 token offset
-        # 訓練 token 範圍: 0 ~ num_train_classes-1
-        # 測試 token 必須完全在此範圍之外
-        train_dataset_tmp = datasets.ImagesDataset(args=args, data_type=data_type, phase='train')
-        num_train_classes = len(set(item['label'] for item in train_dataset_tmp.data))
-        del train_dataset_tmp
-        print(f"訓練類別數: {num_train_classes}, Token offset 起點: {num_train_classes}")
+    with torch.no_grad():
+        for imgs, labels in tqdm(test_loader, desc="Feature Extraction"):
+            imgs, labels = imgs.to(args.device), labels.to(args.device)
+            features = feature_extractor(imgs)
+            h_user = hash_generator(features, labels, training=False)
+            hash_user_list.append(h_user.cpu())
+            labels_list.append(labels.cpu())
 
-        # ---------------------------------------------------------------
-        # Token 設計（論文 Section III-C）
-        # 訓練: token = label (0 ~ N-1)
-        # 測試: token 必須與訓練完全不同，才能驗證零樣本泛化能力
-        #
-        # USER   token: labels + offset_1  → 每位使用者有唯一 token
-        # STOLEN token: 固定錯誤值         → 攻擊者不知道正確 token
-        # RENEWED token: labels + offset_2 → 撤銷舊 token 後重新配發
-        # ---------------------------------------------------------------
-        OFFSET_USER    = num_train_classes + 10000
-        OFFSET_RENEWED = num_train_classes + 20000
-        STOLEN_TOKEN   = num_train_classes + 99999  # 固定錯誤 token（非 0，避免與 label=0 混淆）
+    hash_user    = torch.cat(hash_user_list, dim=0)
+    labels       = torch.cat(labels_list, dim=0)
 
-        feature_extractor, hash_generator = load_models(args, data_type)
+    user_gen, user_imp = get_pairwise_scores_split(hash_user, labels)
+    user_eer, user_acc = compute_eer_and_save_roc(
+        user_gen, user_imp)
 
-        hash_user_list, hash_stolen_list, hash_renewed_list, labels_list = [], [], [], []
 
-        with torch.no_grad():
-            for imgs, labels in tqdm(test_loader, desc="Feature Extraction"):
-                imgs, labels = imgs.to(args.device), labels.to(args.device)
-                features = feature_extractor(imgs)
-
-                # User-Specific Token（核心修正）
-                # 論文: "distinct key sets for training and inference"
-                h_user = hash_generator(features, labels + OFFSET_USER, training=False)
-
-                # Stolen Token：攻擊者對所有人用同一個錯誤 token
-                h_stolen = hash_generator(
-                    features,
-                    torch.full_like(labels, STOLEN_TOKEN),
-                    training=False
-                )
-
-                # Renewed Token：使用者撤銷後取得全新 token
-                h_renewed = hash_generator(features, labels + OFFSET_RENEWED, training=False)
-
-                hash_user_list.append(h_user.cpu())
-                hash_stolen_list.append(h_stolen.cpu())
-                hash_renewed_list.append(h_renewed.cpu())
-                labels_list.append(labels.cpu())
-
-        hash_user    = torch.cat(hash_user_list, dim=0)
-        hash_stolen  = torch.cat(hash_stolen_list, dim=0)
-        hash_renewed = torch.cat(hash_renewed_list, dim=0)
-        labels       = torch.cat(labels_list, dim=0)
-
-        # 驗證指標（同原本邏輯）
-        user_gen, user_imp = get_pairwise_scores_split(hash_user, labels)
-        user_eer, user_acc = compute_eer_and_save_roc(
-            user_gen, user_imp)
-
-        stolen_gen, stolen_imp = get_pairwise_scores_split(hash_stolen, labels)
-        stolen_eer, stolen_acc = compute_eer_and_save_roc(stolen_gen, stolen_imp)
-
-        d_sys = compute_unlinkability(
-            labels, hash_user, hash_renewed,
-            out_dir=os.path.join(args.root_model, str(data_type))
-        )
-
-        print(f"\n================ FSB-HashNet 評估結果 [{data_type}] ================")
-        print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
-        print(f"   驗證效能 (User-Specific Token ACC) : {user_acc * 100:.4f}%")
-        print(f"2. 驗證效能 (Stolen Token EER)        : {stolen_eer * 100:.4f}%")
-        print(f"   驗證效能 (Stolen Token ACC)        : {stolen_acc * 100:.4f}%")
-        print(f"3. 系統不可連結性 (Unlinkability D_sys): {d_sys:.4f}")
-        print(f"======================================================")
+    print(f"\n================ FSB-HashNet 評估結果 [{args.dataset}] ================")
+    print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
+    print(f"   驗證效能 (User-Specific Token ACC) : {user_acc * 100:.4f}%")
+    print(f"======================================================")
 
 if __name__ == '__main__':
     args = configs.get_all_params()
     args.dim = 1024
     args.hash_dim = 512
-    for dataset in ['FV-USM', 'PLUSVein-FV3', 'UTFVP']:
-        args.datasets = dataset
+    for dataset in ['FV-USM', 'PLUSVein-FV3-LED','PLUSVein-FV3-LASER', 'UTFVP']:
+        args.dataset = dataset
         args = configs.get_dataset_params(args)
-        run_test(args)
+        main(args)

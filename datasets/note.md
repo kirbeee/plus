@@ -1,4 +1,18 @@
 # Dataset
+## FB-USM
+123人 （左食指、左中指 右食指、右中指 ）
+finger classes = 123*4 = 492
+session 2
+
+| part          | meaning     |
+|---------------|-------------|
+| 1st_session   | 第一次採集       |
+| extractedvein | 靜脈 ROI      |
+| vein001_2     | 第001人，第2根手指 |
+| 03.jpg        | 第3張影像       |
+
+
+## PLUSFV3
 Dorsal - 手背
 Palmar - 手掌
 LED

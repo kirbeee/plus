@@ -34,19 +34,15 @@ class NewPad(object):
 
 
 class ImagesDataset(Dataset):
-    def __init__(self, args, data_type, phase='train'):
+    def __init__(self, args, phase='train'):
         self.args = args
         self.phase = phase
-        self.data_type = data_type
         self._read_path_label()
         self._setup_transformation()
         self._get_label_list()
 
     def _read_path_label(self):
         pkl = pickle.load(open(self.args.annot_file, 'rb'))
-
-        if self.data_type is not None:
-            pkl = pkl[self.data_type]
         if self.phase == 'train':
             self.data = pkl['train_set']
         elif self.phase == 'test':

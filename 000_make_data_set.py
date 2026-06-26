@@ -1,148 +1,150 @@
+# Pipeline: collect data -> split -> build sample -> save
 import os
 import glob
 import random
-import pickle
+from collections import defaultdict
 import configs
 from tqdm import tqdm
+from datasets import BaseAnnotationBuilder
 
-def create_PLUSVein_annotation(args):
-    def iter(root, Where):
-        sub2classes = {}
-        train_samples, test_samples = [], []
-        data_path = os.path.join(root, Where)
 
-        for folder in tqdm(os.listdir(data_path)):
-            if not os.path.isdir(os.path.join(data_path, folder)):
+class PLUSVeinAnnotationGenerator(BaseAnnotationBuilder):
+    """
+    PLUSVein-FV3 identity definition:
+        identity = f'{folder}_{idx}'
+
+    idx is one of:
+        ['02', '03', '04', '07', '08', '09']
+
+    LED and LASER are generated separately by configs.py.
+    """
+    finger_indices = ['02', '03', '04', '07', '08', '09']
+    def collect_identities_from_subset(self, where):
+        identity_to_paths = defaultdict(list)
+
+        data_path = os.path.join(self.args.data_root, where)
+
+        for folder in tqdm(sorted(os.listdir(data_path)), desc=f"Collect {where}"):
+            folder_path = os.path.join(data_path, folder)
+
+            if not os.path.isdir(folder_path):
                 continue
-            paths = glob.glob(os.path.join(data_path, folder, '*.png'))
-            for idx in ['02', '03', '04', '07', '08', '09']:
+
+            paths = sorted(glob.glob(os.path.join(folder_path, '*.png')))
+
+            for idx in self.finger_indices:
                 identity = f'{folder}_{idx}'
-                filter_paths = [path for path in paths if identity in path]
-                random.shuffle(filter_paths)
 
-                train, test = args.split.split(':')
-                ratio = int(test) / (int(train) + int(test))
-                bps = int(len(filter_paths) * ratio)
-                for_test = filter_paths[:bps]
+                filtered_paths = [
+                    path
+                    for path in paths
+                    if identity in os.path.basename(path)
+                ]
 
-                if not identity in sub2classes:
-                    sub2classes[identity] = len(sub2classes)
+                if len(filtered_paths) > 0:
+                    identity_to_paths[identity].extend(filtered_paths)
 
-                for path in filter_paths:
-                    if path in for_test:
-                        test_samples.append({'path': path, 'label': sub2classes[identity]})
-                    else:
-                        train_samples.append({'path': path, 'label': sub2classes[identity]})
-        return train_samples, test_samples
+        return dict(identity_to_paths)
 
-    train_samples_LED, test_samples_LED = iter(args.data_root, os.path.join('PLUS-FV3-LED', 'PALMAR', '01'))
-    train_samples_LASER, test_samples_LASER = iter(args.data_root, os.path.join('PLUS-FV3-Laser', 'PALMAR', '01'))
-    pickle.dump({
-        'LED': {
-            'train_set': train_samples_LED,
-            'test_set': test_samples_LED,
-        },
-        'LASER': {
-            'train_set': train_samples_LASER,
-            'test_set': test_samples_LASER,
+    def build_annotation(self):
+        identity_to_paths = self.collect_identities_from_subset(
+            os.path.join('PALMAR', '01')
+        )
+
+        train_ids, test_ids, identity_to_paths = self.split_identities(
+            identity_to_paths,
+            min_images_per_identity=1
+        )
+
+        train_samples, train_id2label = self.make_samples_from_ids(
+            identity_to_paths,
+            train_ids)
+        test_samples, test_id2label = self.make_samples_from_ids(
+            identity_to_paths,
+            test_ids)
+        self.print_split_report(
+            self.args.dataset,
+            train_samples,
+            test_samples,
+            train_id2label,
+            test_id2label
+        )
+        annotation = {
+            'train_set': train_samples,
+            'test_set': test_samples
         }
-    }, open(args.annot_file, 'wb'))
-    print(f'train_samples: {len(train_samples_LED)}')
-    print(f'test_samples: {len(test_samples_LED)}')
-    print(test_samples_LED[0])
+        return annotation
 
+class FVUSMAnnotationGenerator(BaseAnnotationBuilder):
+    def collect_identities(self):
+        identity_to_paths = defaultdict(list)
+        session_roots = [
+            os.path.join(
+                self.args.data_root,
+                '1st_session',
+                'extractedvein'),
+            os.path.join(
+                self.args.data_root,
+                '2nd_session',
+                'extractedvein')]
 
-def create_FVUSM_annotation(args):
-    def iter(root, train_samples=[], test_samples=[], sub2classes={}, phase='train'):
-        for sub in tqdm(os.listdir(root)):
-            if not os.path.isdir(os.path.join(root, sub)):
-                continue
-            paths = glob.glob(os.path.join(root, sub, '*.jpg'))
-            random.shuffle(paths)
+        for root in session_roots:
+            for sub in tqdm(sorted(os.listdir(root))):
+                sub_path = os.path.join(root, sub)
+                if not os.path.isdir(sub_path):
+                    continue
+                paths = sorted(glob.glob(os.path.join(sub_path,"*.jpg")))
 
-            train, test = args.split.split(':')
-            ratio = int(test) / (int(train) + int(test))
-            bps = int(len(paths) * ratio)
-            for_test = paths[:bps]
+                if len(paths) > 0:
+                    identity_to_paths[sub].extend(paths)
 
-            if sub not in sub2classes:
-                sub2classes[sub] = len(sub2classes)
+        return dict(identity_to_paths)
 
-            for path in paths:
-                if path in for_test:
-                    test_samples.append({'path': path, 'label': sub2classes[sub]})
-                else:
-                    train_samples.append({'path': path, 'label': sub2classes[sub]})
+class UTFVPAnnotationGenerator(BaseAnnotationBuilder):
+    """
+    UTFVP identity definition:
+        identity = f'{sub}_{finger}'
 
-        return train_samples, test_samples, sub2classes
-
-    train_samples, test_samples, sub2classes = iter(os.path.join(args.data_root, '1st_session', 'extractedvein'))
-    train_samples, test_samples, sub2classes = iter(os.path.join(args.data_root, '2nd_session', 'extractedvein'),
-                                                    train_samples, test_samples, sub2classes)
-    pickle.dump({
-        'train_set': train_samples,
-        'test_set': test_samples,
-    }, open(args.annot_file, 'wb'))
-    print(f'train_samples: {len(train_samples)}')
-    print(f'test_samples: {len(test_samples)}')
-    print(test_samples[0])
-
-
-def create_UTFVP_annotation(args):
-    def iter(root_path):
-        sub2classes = {}
-        train_samples, test_samples = [], []
-
-        for sub in tqdm(os.listdir(root_path)):
-            sub_path = os.path.join(root_path, sub)
-
+    Each subject-finger pair is treated as one identity class
+    """
+    def collect_identities(self):
+        identity_to_paths = defaultdict(list)
+        for sub in tqdm(sorted(os.listdir(self.args.data_root))):
+            sub_path = os.path.join(self.args.data_root, sub)
             if not os.path.isdir(sub_path):
                 continue
 
             for finger in range(1, 7):
-                paths = glob.glob(os.path.join(sub_path, f'{sub}_{finger}_*.png'))
-
-                random.shuffle(paths)
-
-                train, test = args.split.split(':')
-                ratio = int(test) / (int(train) + int(test))
-                bps = int(len(paths) * ratio)
-                for_test = paths[:bps]
-
-                if not f'{sub}_{finger}' in sub2classes:
-                    sub2classes[f'{sub}_{finger}'] = len(sub2classes)
-
-                for path in paths:
-                    if path in for_test:
-                        test_samples.append({'path': path, 'label': sub2classes[f'{sub}_{finger}']})
-                    else:
-                        train_samples.append({'path': path, 'label': sub2classes[f'{sub}_{finger}']})
-
-        return train_samples, test_samples
-
-    train_samples, test_samples = iter(args.data_root)
-    pickle.dump({
-        'train_set': train_samples,
-        'test_set': test_samples,
-    }, open(args.annot_file, 'wb'))
-
-    print(f'train_samples: {len(train_samples)}')
-    print(f'test_samples: {len(test_samples)}')
-    print(train_samples[0])
-
+                identity = f'{sub}_{finger}'
+                paths = sorted(
+                    glob.glob(
+                        os.path.join(
+                            sub_path,
+                            f'{sub}_{finger}_*.png')))
+                if len(paths) > 0:
+                    identity_to_paths[identity].extend(paths)
+        return dict(identity_to_paths)
 
 if __name__ == '__main__':
     args = configs.get_all_params()
     configs.setup_seed(args.seed)
 
-    args.datasets = 'FV-USM'
+    args.dataset = 'FV-USM'
     args = configs.get_dataset_params(args)
-    create_FVUSM_annotation(args)
+    generator = FVUSMAnnotationGenerator(args)
+    generator.generate()
 
-    args.datasets = 'UTFVP'
+    args.dataset = 'UTFVP'
     args = configs.get_dataset_params(args)
-    create_UTFVP_annotation(args)
+    generator = UTFVPAnnotationGenerator(args)
+    generator.generate()
 
-    args.datasets = 'PLUSVein-FV3'
+    args.dataset = 'PLUSVein-FV3-LED'
     args = configs.get_dataset_params(args)
-    create_PLUSVein_annotation(args)
+    generator = PLUSVeinAnnotationGenerator(args)
+    generator.generate()
+
+    args.dataset = 'PLUSVein-FV3-LASER'
+    args = configs.get_dataset_params(args)
+    generator = PLUSVeinAnnotationGenerator(args)
+    generator.generate()

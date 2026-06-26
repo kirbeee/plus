@@ -4,10 +4,52 @@ import random
 import argparse
 import numpy as np
 
+DATASET_ROOT = '/mnt/c/Users/msp/Documents/git-repo/plus/datasets'
+ANNOTATION_ROOT = '/mnt/c/Users/msp/Documents/git-repo/plus/annotation'
+MODEL_ROOT = '/mnt/c/Users/msp/Documents/git-repo/plus/model'
+
+DATASET_CONFIGS = {
+    'PLUSVein-FV3-LED':{
+        'split' : '3:2',
+        'classes': 360,
+        'pad_height_width' : 736,
+        'data_root': os.path.join(
+            DATASET_ROOT,
+            'PLUSVein-FV3',
+            'PLUSVein-FV3-ROI_combined',
+            'ROI',
+            'PLUS-FV3-LED',
+        ),
+    },
+    'PLUSVein-FV3-LASER':{
+        'split' : '3:2',
+        'classes': 360,
+        'pad_height_width' : 736,
+        'data_root': os.path.join(
+            DATASET_ROOT,
+            'PLUSVein-FV3',
+            'PLUSVein-FV3-ROI_combined',
+            'ROI',
+            'PLUS-FV3-Laser',
+        ),
+    },
+    'UTFVP':{
+        'split': '1:3',
+        'classes': 360,
+        'pad_height_width': 672,
+        'data_root': os.path.join(DATASET_ROOT, 'UTFVP', 'data'),
+    },
+    'FV-USM':{
+        'split': '2:1',
+        'classes': 492,
+        'pad_height_width': 300,
+        'data_root': os.path.join(DATASET_ROOT, 'FV-USM')
+    }
+}
 
 def get_basic_params():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--datasets', type=str, default="PLUSVein-FV3")
+    parser.add_argument('--dataset', type=str, default="PLUSVein-FV3-LED")
     parser.add_argument('--optim', type=str, default="adamw")
     parser.add_argument('--scheduler', type=str, default='cosine')
     parser.add_argument('--img_size', type=int, default=112)
@@ -19,34 +61,18 @@ def get_basic_params():
 
 
 def get_dataset_params(args):
-    args.dataset_root = '/mnt/c/Users/msp/Documents/git-repo/plus/datasets'
-    if args.datasets == 'PLUSVein-FV3':
-        args.split = '3:2'
-        args.classes = 360
-        args.pad_height_width = 736
-        args.data_type = ['LED', 'LASER']
-        args.data_root = args.dataset_root + '/PLUSVein-FV3/PLUSVein-FV3-ROI_combined/ROI'
-        args.root_model = './checkpoint/PLUSVein-FV3'
-        args.annot_file = 'datasets/annotations_plusvein.pkl'
-        args.eval_root = './evaluate' + args.datasets
-    elif args.datasets == 'UTFVP':
-        args.split = '1:3'
-        args.classes = 360
-        args.pad_height_width = 672
-        args.data_type = [None]
-        args.data_root = args.dataset_root + '/UTFVP/data'
-        args.root_model = './checkpoint/UTFVP'
-        args.annot_file = './datasets/annotations_utfvp.pkl'
-        args.eval_root = './evaluate' + args.datasets
-    elif args.datasets == 'FV-USM':
-        args.split = '2:1'
-        args.classes = 492
-        args.pad_height_width = 300
-        args.data_type = [None]
-        args.data_root = args.dataset_root + '/FV-USM'
-        args.root_model = './checkpoint/FV-USM'
-        args.annot_file = './datasets/annotations_fvusm.pkl'
-        args.eval_root = './evaluate' + args.datasets
+    if args.dataset not in DATASET_CONFIGS:
+        raise ValueError(f"Unknown dataset")
+    dataset_config = DATASET_CONFIGS[args.dataset]
+    args.dataset_root = DATASET_ROOT
+    if not os.path.exists(ANNOTATION_ROOT):
+        os.makedirs(ANNOTATION_ROOT)
+    args.annot_file = os.path.join(ANNOTATION_ROOT,f'{args.dataset}.pkl')
+    if not os.path.exists(MODEL_ROOT):
+        os.makedirs(MODEL_ROOT)
+    args.model_root = MODEL_ROOT
+    for key, value in dataset_config.items():
+        setattr(args, key, value)
     return args
 
 

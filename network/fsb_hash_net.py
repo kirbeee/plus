@@ -149,17 +149,22 @@ class FSB_Hash_Net(Module):
     def forward(self, x):
         out = self.conv1(x)
         out = self.conv2_dw(out)
+
         out = self.encoder_1(out)
         out = self.conv_23(out)
         out = self.conv_3(out)
+
         out = self.encoder_2(out)
         out = self.conv_34(out)
         out = self.conv_4(out)
+
         out = self.encoder_3(out)
         out = self.conv_45(out)
         out = self.conv_5(out)
+
         out = self.conv_6_sep(out)
         emb = self.conv_6_dw(out)
+
         emb = self.conv_6_flatten(emb)
         emb = self.dropout(emb)
         emb = self.linear(emb)

@@ -7,7 +7,6 @@ __pycache__/
 weights/
 checkpoint/
 graphs/
-datasets/annotations_plusvein.pkl
-datasets/annotations_fvusm.pkl
-datasets/annotations_utfvp.pkl
+annotation/
+model/
 unlinkability_dist.png

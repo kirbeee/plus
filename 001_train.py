@@ -8,7 +8,8 @@ from tqdm import tqdm
 import configs
 import datasets
 from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
-from network.logits import ArcFace
+from network.mamba_net import Mamba_Hash_Net
+from network.fsb_logits import ArcFace
 
 
 def train(args):
@@ -28,7 +29,7 @@ def train(args):
 
     # --- model initialize ---
     # 1. 初始化特徵提取器 (Feature Extractor) 與雜湊生成器 (Hash Generator)
-    feature_extractor = FSB_Hash_Net(embedding_size=args.dim, do_prob=args.dropout).to(args.device)
+    feature_extractor = Mamba_Hash_Net(embedding_size=args.dim).to(args.device)
     generator = Hash_Generator(embedding_size=args.dim, do_prob=args.dropout, device=args.device,
                                out_embedding_size=args.hash_dim).to(args.device)
 

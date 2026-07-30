@@ -232,6 +232,186 @@ class EfficientMerge(torch.autograd.Function):  # [B, 4, C, H/w * W/w] -> [B, C,
         if ctx.ori_w % step_size != 0:
             pad_w = step_s
 
+class SS2D(nn.Module):
+    """
+    Compatible SS2D implementation.
+
+    Input:
+        x: [B, H, W, C]
+
+    Output:
+        x: [B, H, W, C]
+
+    Compatible with:
+        WarpedSS2D.mamba(...)
+    """
+
+    def __init__(
+        self,
+        d_model,
+        d_state=16,
+        d_conv=3,
+        expand=2,
+        dropout=0.0,
+        **kwargs
+    ):
+        super().__init__()
+
+        self.d_model = d_model
+        self.d_state = d_state
+        self.expand = expand
+
+        inner_dim = int(expand * d_model)
+
+        self.in_proj = nn.Linear(
+            d_model,
+            inner_dim * 2
+        )
+
+        self.dwconv = nn.Conv2d(
+            inner_dim,
+            inner_dim,
+            kernel_size=d_conv,
+            padding=d_conv // 2,
+            groups=inner_dim
+        )
+
+        self.act = nn.SiLU()
+
+
+        # SSM parameters
+        self.x_proj = nn.Linear(
+            inner_dim,
+            d_state * 2 + 1,
+            bias=False
+        )
+
+
+        self.dt_proj = nn.Linear(
+            1,
+            inner_dim
+        )
+
+
+        self.A = nn.Parameter(
+            torch.randn(
+                inner_dim,
+                d_state
+            )
+        )
+
+        self.D = nn.Parameter(
+            torch.ones(inner_dim)
+        )
+
+
+        self.out_proj = nn.Linear(
+            inner_dim,
+            d_model
+        )
+
+
+        self.dropout = nn.Dropout(dropout)
+
+
+
+    def forward(self, x):
+
+        # x:
+        # B,H,W,C
+
+        B,H,W,C = x.shape
+
+
+        xz = self.in_proj(x)
+
+        x, z = xz.chunk(2, dim=-1)
+
+
+        # depthwise conv
+        x = x.permute(
+            0,3,1,2
+        )
+
+        x = self.dwconv(x)
+
+        x = x.permute(
+            0,2,3,1
+        )
+
+
+        x = self.act(x)
+
+
+        # flatten spatial sequence
+
+        L = H * W
+
+        x_seq = x.reshape(
+            B,
+            L,
+            -1
+        )
+
+
+        # simple SSM projection
+
+        ssm_params = self.x_proj(x_seq)
+
+        dt, B_param, C_param = torch.split(
+            ssm_params,
+            [
+                1,
+                self.d_state,
+                self.d_state
+            ],
+            dim=-1
+        )
+
+
+        dt = self.dt_proj(dt)
+
+
+        # 如果有 CUDA selective scan
+        # 使用真正 Mamba kernel
+
+        if selective_scan_fn is not None:
+
+            xs = x_seq.transpose(1,2)
+
+            out = selective_scan_fn(
+                xs,
+                dt.transpose(1,2),
+                self.A,
+                B_param.transpose(1,2),
+                C_param.transpose(1,2),
+                self.D,
+                z=None
+            )
+
+            out = out.transpose(1,2)
+
+        else:
+
+            # fallback:
+            # 沒有 mamba_ssm 時退化成 gated local mixing
+
+            out = x_seq * torch.sigmoid(
+                z.reshape(B,L,-1)
+            )
+
+
+        out = out.reshape(
+            B,H,W,-1
+        )
+
+
+        out = self.out_proj(out)
+
+        out = self.dropout(out)
+
+        return out
+
 class WarpedSS2D(nn.Module):
     SPLIT_RATIOS = [1 / 4, 1 / 2, 1 / 2, 3 / 4]
 

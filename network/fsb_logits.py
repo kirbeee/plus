@@ -3,7 +3,6 @@ from torch import nn
 from torch.nn.parameter import Parameter
 from torch.nn import functional as F
 import math
-import numpy as np
 
 # ***** CrossEntropy *****
 
@@ -32,8 +31,6 @@ class CrossEntropy(nn.Module):
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.weight)
 
-
-# *** *** *** *** ***
 
 # URL : https://github.com/ronghuaiyang/arcface-pytorch/blob/master/models/metrics.py
 # Args:

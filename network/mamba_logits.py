@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 # from einops import repeat, rearrange
-
+from .vmamba import SS2D
 
 def antidiagonal_gather(tensor):
     # 取出矩阵所有反斜向的元素并拼接
@@ -230,80 +230,6 @@ class EfficientScan(torch.autograd.Function):
 #
 #         if ctx.ori_w % step_size != 0:
 #             pad_w = step_s
-
-class SS2D(nn.Module):
-    def __init__(
-            self,
-            d_model,
-            d_state=16,
-            # d_state="auto", # 20240109
-            d_conv=3,
-            expand=2,
-            dt_rank="auto",
-            dt_min=0.001,
-            dt_max=0.1,
-            dt_init="random",
-            dt_scale=1.0,
-            dt_init_floor=1e-4,
-            dropout=0.,
-            conv_bias=True,
-            bias=False,
-            device=None,
-            dtype=None,
-            **kwargs,
-    ):
-        factory_kwargs = {"device": device, "dtype": dtype}
-        super().__init__()
-        self.d_model = d_model
-        self.d_state = d_state
-        self.d_conv = d_conv
-        self.expand = expand
-        self.d_inner = int(self.expand * self.d_model)
-        self.dt_rank = math.ceil(self.d_model / 16) if dt_rank == "auto" else dt_rank
-
-        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=bias, **factory_kwargs)
-        self.conv2d = nn.Conv2d(
-            in_channels=self.d_inner,
-            out_channels=self.d_inner,
-            groups=self.d_inner,
-            bias=conv_bias,
-            kernel_size=d_conv,
-            padding=(d_conv - 1) // 2,
-            **factory_kwargs,
-        )
-        self.act = nn.SiLU()
-
-        self.x_proj = (
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
-        )
-        self.x_proj_weight = nn.Parameter(torch.stack([t.weight for t in self.x_proj], dim=0))  # (K=4, N, inner)
-        del self.x_proj
-
-        self.dt_projs = (
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
-        )
-        self.dt_projs_weight = nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0))  # (K=4, inner, rank)
-        self.dt_projs_bias = nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))  # (K=4, inner)
-        del self.dt_projs
-
-        self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
-        self.Ds = self.D_init(self.d_inner, copies=4, merge=True)  # (K=4, D, N)
-
-        self.forward_core = self.forward_corev0
-
-        self.out_norm = nn.LayerNorm(self.d_inner)
-        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
-        self.dropout = nn.Dropout(dropout) if dropout > 0. else None
 
 class WarpedSS2D(nn.Module):
     SPLIT_RATIOS = [1 / 4, 1 / 2, 1 / 2, 3 / 4]

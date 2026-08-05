@@ -233,184 +233,78 @@ class EfficientMerge(torch.autograd.Function):  # [B, 4, C, H/w * W/w] -> [B, C,
             pad_w = step_s
 
 class SS2D(nn.Module):
-    """
-    Compatible SS2D implementation.
-
-    Input:
-        x: [B, H, W, C]
-
-    Output:
-        x: [B, H, W, C]
-
-    Compatible with:
-        WarpedSS2D.mamba(...)
-    """
-
     def __init__(
-        self,
-        d_model,
-        d_state=16,
-        d_conv=3,
-        expand=2,
-        dropout=0.0,
-        **kwargs
+            self,
+            d_model,
+            d_state=16,
+            # d_state="auto", # 20240109
+            d_conv=3,
+            expand=2,
+            dt_rank="auto",
+            dt_min=0.001,
+            dt_max=0.1,
+            dt_init="random",
+            dt_scale=1.0,
+            dt_init_floor=1e-4,
+            dropout=0.,
+            conv_bias=True,
+            bias=False,
+            device=None,
+            dtype=None,
+            **kwargs,
     ):
+        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
-
         self.d_model = d_model
         self.d_state = d_state
+        self.d_conv = d_conv
         self.expand = expand
+        self.d_inner = int(self.expand * self.d_model)
+        self.dt_rank = math.ceil(self.d_model / 16) if dt_rank == "auto" else dt_rank
 
-        inner_dim = int(expand * d_model)
-
-        self.in_proj = nn.Linear(
-            d_model,
-            inner_dim * 2
-        )
-
-        self.dwconv = nn.Conv2d(
-            inner_dim,
-            inner_dim,
+        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=bias, **factory_kwargs)
+        self.conv2d = nn.Conv2d(
+            in_channels=self.d_inner,
+            out_channels=self.d_inner,
+            groups=self.d_inner,
+            bias=conv_bias,
             kernel_size=d_conv,
-            padding=d_conv // 2,
-            groups=inner_dim
+            padding=(d_conv - 1) // 2,
+            **factory_kwargs,
         )
-
         self.act = nn.SiLU()
 
-
-        # SSM parameters
-        self.x_proj = nn.Linear(
-            inner_dim,
-            d_state * 2 + 1,
-            bias=False
+        self.x_proj = (
+            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
+            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
+            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
+            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
         )
+        self.x_proj_weight = nn.Parameter(torch.stack([t.weight for t in self.x_proj], dim=0))  # (K=4, N, inner)
+        del self.x_proj
 
-
-        self.dt_proj = nn.Linear(
-            1,
-            inner_dim
+        self.dt_projs = (
+            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
+                         **factory_kwargs),
+            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
+                         **factory_kwargs),
+            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
+                         **factory_kwargs),
+            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
+                         **factory_kwargs),
         )
+        self.dt_projs_weight = nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0))  # (K=4, inner, rank)
+        self.dt_projs_bias = nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))  # (K=4, inner)
+        del self.dt_projs
 
+        self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
+        self.Ds = self.D_init(self.d_inner, copies=4, merge=True)  # (K=4, D, N)
 
-        self.A = nn.Parameter(
-            torch.randn(
-                inner_dim,
-                d_state
-            )
-        )
+        self.forward_core = self.forward_corev0
 
-        self.D = nn.Parameter(
-            torch.ones(inner_dim)
-        )
-
-
-        self.out_proj = nn.Linear(
-            inner_dim,
-            d_model
-        )
-
-
-        self.dropout = nn.Dropout(dropout)
-
-
-
-    def forward(self, x):
-
-        # x:
-        # B,H,W,C
-
-        B,H,W,C = x.shape
-
-
-        xz = self.in_proj(x)
-
-        x, z = xz.chunk(2, dim=-1)
-
-
-        # depthwise conv
-        x = x.permute(
-            0,3,1,2
-        )
-
-        x = self.dwconv(x)
-
-        x = x.permute(
-            0,2,3,1
-        )
-
-
-        x = self.act(x)
-
-
-        # flatten spatial sequence
-
-        L = H * W
-
-        x_seq = x.reshape(
-            B,
-            L,
-            -1
-        )
-
-
-        # simple SSM projection
-
-        ssm_params = self.x_proj(x_seq)
-
-        dt, B_param, C_param = torch.split(
-            ssm_params,
-            [
-                1,
-                self.d_state,
-                self.d_state
-            ],
-            dim=-1
-        )
-
-
-        dt = self.dt_proj(dt)
-
-
-        # 如果有 CUDA selective scan
-        # 使用真正 Mamba kernel
-
-        if selective_scan_fn is not None:
-
-            xs = x_seq.transpose(1,2)
-
-            out = selective_scan_fn(
-                xs,
-                dt.transpose(1,2),
-                self.A,
-                B_param.transpose(1,2),
-                C_param.transpose(1,2),
-                self.D,
-                z=None
-            )
-
-            out = out.transpose(1,2)
-
-        else:
-
-            # fallback:
-            # 沒有 mamba_ssm 時退化成 gated local mixing
-
-            out = x_seq * torch.sigmoid(
-                z.reshape(B,L,-1)
-            )
-
-
-        out = out.reshape(
-            B,H,W,-1
-        )
-
-
-        out = self.out_proj(out)
-
-        out = self.dropout(out)
-
-        return out
+        self.out_norm = nn.LayerNorm(self.d_inner)
+        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
+        self.dropout = nn.Dropout(dropout) if dropout > 0. else None
 
 class WarpedSS2D(nn.Module):
     SPLIT_RATIOS = [1 / 4, 1 / 2, 1 / 2, 3 / 4]

@@ -275,11 +275,20 @@ class WarpedSS2D(nn.Module):
             x_low_orig = x_low
             x_low_pooled = self.avgpool(x_low)
             high_freq = x_low_orig - F.interpolate(x_low_pooled, size=(H, W), mode='nearest')
+            x_low_pooled = x_low_pooled.permute(0, 2, 3, 1)
             attn_out = self.atn(x_low_pooled)
-            x_low = F.interpolate(attn_out, scale_factor=self.pool_scale, mode='bilinear',
-                                  align_corners=False) + high_freq
+            attn_out = attn_out.permute(0, 3, 1, 2)
+
+            x_low = F.interpolate(
+                attn_out,
+                scale_factor=self.pool_scale,
+                mode="bilinear",
+                align_corners=False,
+            ) + high_freq
         else:
+            x_low = x_low.permute(0, 2, 3, 1)
             x_low = self.atn(x_low)
+            x_low = x_low.permute(0, 3, 1, 2)
 
         x = torch.cat((x_low, x_high), dim=1)
         return self.dropout(self.out_proj(x))

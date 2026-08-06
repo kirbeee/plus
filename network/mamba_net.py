@@ -1,27 +1,3 @@
-"""
-Mamba_Hash_Net
-==============
-
-Same overall topology as `FSB_Hash_Net` (network/fsb_hash_net.py), except the
-"bottleneck" stages -- originally `Residual` blocks made of stacked
-`Depth_Wise(residual=True)` inverted-residual units -- are replaced with
-stacks of `WarpedSS2D` (network/mamba_logits.py), a Mamba/SS2D-based block
-that mixes a 2D selective-scan branch (on a pooled low-frequency channel
-split) with a depthwise-conv branch (on a high-frequency channel split).
-
-Everything else (stem, stride-2 down-sampling transitions, the PFE_Block
-self-attention encoders inserted between stages, and the embedding head)
-is kept identical to FSB_Hash_Net so weights/shapes stay drop-in compatible
-with the rest of the training pipeline (001_train.py, fsb_logits.py, etc).
-
-IMPORTANT DEPENDENCY NOTE
---------------------------
-`WarpedSS2D` (in mamba_logits.py) instantiates `SS2D(...)`, but `SS2D` is
-not defined or imported anywhere in the mamba_logits.py that was provided.
-Make sure `SS2D` is available in that module's namespace (e.g. add
-`from .vmamba import SS2D` or paste the class definition in) before using
-Mamba_Hash_Net, otherwise construction will raise `NameError: SS2D`.
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,37 +7,24 @@ from .mamba_logits import WarpedSS2D
 
 
 class MambaBottleneck(nn.Module):
-    """Stack of `num_block` WarpedSS2D blocks.
-
-    Drop-in replacement for `Residual` (stack of `Depth_Wise(residual=True)`
-    blocks) in FSB_Hash_Net -- same role (per-resolution feature refinement
-    at constant channel count / spatial size), different mechanism (Mamba
-    2D-scan + local conv instead of depthwise-separable conv).
-    """
-
-    def __init__(self, channels, num_block, index, d_state=8, d_conv=7,
+    def __init__(self, channels, index, d_state=8, d_conv=7,
                  expand=1, ssm_ratio=2.0, drop_rate=0.0):
         super().__init__()
-        self.blocks = nn.Sequential(*[
-            WarpedSS2D(
-                d_model=channels,
-                d_state=d_state,
-                d_conv=d_conv,
-                expand=expand,
-                drop_rate=drop_rate,
-                ssm_ratio=ssm_ratio,
-                index=index,
-            )
-            for _ in range(num_block)
-        ])
-
+        self.SS2D = WarpedSS2D(
+            d_model=channels,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
+            drop_rate=drop_rate,
+            ssm_ratio=ssm_ratio,
+            index=index)
     def forward(self, x):
-        return self.blocks(x)
+        x = self.SS2D(x)
+        return x
 
 
 class Mamba_Hash_Net(nn.Module):
-    """Feature extractor used by 001_train.py in place of FSB_Hash_Net.
-
+    """
     Args:
         embedding_size: output embedding dim (matches FSB_Hash_Net).
         do_prob: dropout prob for the head and (optionally) each
@@ -79,7 +42,7 @@ class Mamba_Hash_Net(nn.Module):
                  d_state=8, d_conv=7, expand=1, ssm_ratio=2.0):
         super().__init__()
 
-        # --- stem (unchanged) ---
+        # --- stem ---
         self.conv1 = Conv_block(3, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1))
         self.conv2_dw = Conv_block(64, 64, kernel=(3, 3), stride=(1, 1), padding=(1, 1), groups=64)
 
@@ -94,15 +57,15 @@ class Mamba_Hash_Net(nn.Module):
         #   conv_3 @ 28x28, pool_scale=2**(3-1)=4 -> 7x7
         #   conv_4 @ 14x14, pool_scale=2**(3-2)=2 -> 7x7
         #   conv_5 @  7x7,  index=3 -> no pooling, already 7x7
-        self.conv_3 = MambaBottleneck(64, num_block=4, index=1,
+        self.conv_3 = MambaBottleneck(64, index=1,
                                        d_state=d_state, d_conv=d_conv,
                                        expand=expand, ssm_ratio=ssm_ratio,
                                        drop_rate=do_prob)
-        self.conv_4 = MambaBottleneck(128, num_block=6, index=2,
+        self.conv_4 = MambaBottleneck(128, index=2,
                                        d_state=d_state, d_conv=d_conv,
                                        expand=expand, ssm_ratio=ssm_ratio,
                                        drop_rate=do_prob)
-        self.conv_5 = MambaBottleneck(128, num_block=2, index=3,
+        self.conv_5 = MambaBottleneck(128, index=3,
                                        d_state=d_state, d_conv=d_conv,
                                        expand=expand, ssm_ratio=ssm_ratio,
                                        drop_rate=do_prob)
@@ -126,15 +89,15 @@ class Mamba_Hash_Net(nn.Module):
 
         out = self.encoder_1(out)
         out = self.conv_23(out)
-        out = self.conv_3(out)          # Mamba bottleneck stage 1 (28x28, 64ch)
+        out = self.conv_3(out)
 
         out = self.encoder_2(out)
         out = self.conv_34(out)
-        out = self.conv_4(out)          # Mamba bottleneck stage 2 (14x14, 128ch)
+        out = self.conv_4(out)
 
         out = self.encoder_3(out)
         out = self.conv_45(out)
-        out = self.conv_5(out)          # Mamba bottleneck stage 3 (7x7, 128ch)
+        out = self.conv_5(out)
 
         out = self.conv_6_sep(out)
         emb = self.conv_6_dw(out)
@@ -145,12 +108,3 @@ class Mamba_Hash_Net(nn.Module):
         emb = self.bn(emb)
 
         return F.normalize(emb, p=2, dim=1)
-
-
-if __name__ == '__main__':
-    # quick shape sanity check (requires SS2D to be resolvable in mamba_logits.py,
-    # and the mamba_ssm package installed with a CUDA build for selective_scan_fn)
-    model = Mamba_Hash_Net(embedding_size=1024)
-    x = torch.randn(2, 3, 112, 112)
-    y = model(x)
-    print(y.shape)  # expected: torch.Size([2, 1024])

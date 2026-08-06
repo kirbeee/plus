@@ -5,12 +5,13 @@ from tqdm import tqdm
 import configs
 import datasets
 from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
+from network.mamba_net import Mamba_Hash_Net
 from testkit.unlinkability_metric import UnlinkabilityMetric
 import numpy as np
 from sklearn.metrics import roc_curve
 
 def load_models(args):
-    feature_extractor = FSB_Hash_Net(embedding_size=args.dim, do_prob=0.0).to(args.device)
+    feature_extractor = Mamba_Hash_Net(embedding_size=args.dim).to(args.device)
     hash_generator = Hash_Generator(embedding_size=args.dim, do_prob=0.0, device=args.device, out_embedding_size=args.hash_dim).to(
         args.device)
     fe_path = os.path.join(args.model_root, f'{args.dataset}_feature_extractor.pth')

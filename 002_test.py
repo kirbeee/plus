@@ -6,9 +6,8 @@ import configs
 import datasets
 from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
 from network.mamba_net import Mamba_Hash_Net
+from testkit.EER_metric import EERMetric
 from testkit.unlinkability_metric import UnlinkabilityMetric
-import numpy as np
-from sklearn.metrics import roc_curve
 
 def load_models(args):
     feature_extractor = Mamba_Hash_Net(embedding_size=args.dim).to(args.device)
@@ -27,63 +26,7 @@ def load_models(args):
     hash_generator.eval()
     return feature_extractor, hash_generator
 
-def compute_eer_and_save_roc(genuine_scores, imposter_scores):
-    """
-    計算 EER 並可選擇性將 ROC 曲線儲存成圖片
-    :param genuine_scores: 正樣本（真實匹配）的分數列表/陣列
-    :param imposter_scores: 負樣本（冒充匹配）的分數列表/陣列
-    :param save_path: 圖片儲存路徑（例如 'roc_curve.png'），若為 None 則不儲存
-    """
-    # 1. 建立 Ground Truth 與 分數
-    y_true = np.concatenate([np.ones_like(genuine_scores), np.zeros_like(imposter_scores)])
-    y_scores = np.concatenate([genuine_scores, imposter_scores])
-
-    # 2. 計算 ROC 曲線節點與 AUC 這是一個陣列
-    fpr, tpr, thresholds = roc_curve(y_true, y_scores, pos_label=1)
-
-    # 3. 計算 EER
-    fnr = 1 - tpr
-    min_index = np.argmin(np.abs(fpr - fnr))
-    eer = np.mean((fpr[min_index], fnr[min_index]))
-
-    # 計算最佳準確率 (Best Accuracy)
-    P = len(genuine_scores)  # 正樣本總數
-    N = len(imposter_scores)  # 負樣本總數
-    # 利用 TPR = TP/P -> TP = TPR * P ； FPR = FP/N -> TN = (1 - FPR) * N
-    acc_list = (tpr * P + (1 - fpr) * N) / (P + N)
-    best_acc = np.max(acc_list)
-
-    return eer, best_acc
-
-def get_pairwise_scores_split(embeddings, labels):
-    n = embeddings.shape[0]
-    idx = torch.randperm(n)
-
-    half = n // 2
-    idx_A = idx[:half]
-    idx_B = idx[half:half*2]
-
-    embeds_A = embeddings[idx_A]
-    embeds_B = embeddings[idx_B]
-    labels_A = labels[idx_A]
-    labels_B = labels[idx_B]
-
-    embeds_A = torch.nn.functional.normalize(embeds_A, p=2, dim=1)
-    embeds_B = torch.nn.functional.normalize(embeds_B, p=2, dim=1)
-
-    sim_matrix = torch.mm(embeds_A, embeds_B.t()).cpu().numpy()
-
-    labels_A = labels_A.cpu().numpy()
-    labels_B = labels_B.cpu().numpy()
-
-    same = (labels_A[:, None] == labels_B[None, :])
-
-    genuine = sim_matrix[same]
-    imposter = sim_matrix[~same]
-
-    return genuine, imposter
-
-def compute_unlinkability(labels, hash_user, hash_renewed, out_dir=None):
+def unlinkability(labels, hash_user, hash_renewed, out_dir=None):
     # --- 1. 不可連結性 (Unlinkability / Revocability) ---
     sim_matrix_cross = torch.mm(
         torch.nn.functional.normalize(hash_user, p=2, dim=1),
@@ -108,33 +51,49 @@ def compute_unlinkability(labels, hash_user, hash_renewed, out_dir=None):
 
     return dsys
 
+class ModelEvaluator:
+    def __init__(self, args, metics):
+        self.args = args
+        self.metics = metics
+    def extract_features(self, test_loader, feature_extractor, hash_generator):
+        hash_user_list, labels_list = [], []
+        with torch.no_grad():
+            for imgs, labels in tqdm(test_loader, desc="Feature Extraction"):
+                imgs, labels = imgs.to(args.device), labels.to(args.device)
+                features = feature_extractor(imgs)
+                h_user = hash_generator(features, labels, training=False)
+                hash_user_list.append(h_user.cpu())
+                labels_list.append(labels.cpu())
+        return torch.cat(hash_user_list, dim=0), torch.cat(labels_list, dim=0)
+
+    def run_evaluation(self, embeddings, labels, **kwargs):
+        result = {}
+        for metric in self.metics:
+            result[metric.name] = metric.compute(embeddings, labels, **kwargs)
+        return result
+
 def main(args):
     configs.setup_seed(args.seed)
     test_dataset = datasets.ImagesDataset(args=args, phase='test')
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
     feature_extractor, hash_generator = load_models(args)
-    hash_user_list, labels_list = [], []
 
-    with torch.no_grad():
-        for imgs, labels in tqdm(test_loader, desc="Feature Extraction"):
-            imgs, labels = imgs.to(args.device), labels.to(args.device)
-            features = feature_extractor(imgs)
-            h_user = hash_generator(features, labels, training=False)
-            hash_user_list.append(h_user.cpu())
-            labels_list.append(labels.cpu())
-
-    hash_user    = torch.cat(hash_user_list, dim=0)
-    labels       = torch.cat(labels_list, dim=0)
-
-    user_gen, user_imp = get_pairwise_scores_split(hash_user, labels)
-    user_eer, user_acc = compute_eer_and_save_roc(
-        user_gen, user_imp)
-
+    metics_to_run = [
+        EERMetric(),
+    ]
+    evaluator = ModelEvaluator(args, metics_to_run)
+    hash_user, label = evaluator.extract_features(test_loader, feature_extractor, hash_generator)
+    results = evaluator.run_evaluation(hash_user, label)
 
     print(f"\n================ FSB-HashNet 評估結果 [{args.dataset}] ================")
-    print(f"1. 驗證效能 (User-Specific Token EER) : {user_eer * 100:.4f}%")
-    print(f"   驗證效能 (User-Specific Token ACC) : {user_acc * 100:.4f}%")
-    print(f"======================================================")
+    for metric_name, metric_result in results.items():
+        print(f"[{metric_name}]")
+        for key, val in metric_result.items():
+            if isinstance(val, float):
+                print(f"   - {key}: {val * 100:.4f}%" if "EER" in key or "ACC" in key else f"   - {key}: {val:.4f}")
+            else:
+                print(f"   - {key}: {val}")
+    print(f"========================================================================")
 
 if __name__ == '__main__':
     args = configs.get_all_params()

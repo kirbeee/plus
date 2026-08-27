@@ -271,7 +271,7 @@ class WarpedSS2D(nn.Module):
         x_low, x_high = torch.split(x, self.split, dim=1)
         x_high = self.local_conv(x_high)
 
-        if self.use_pool:
+        if self.use_pool: # 學習low frequency 特徵
             x_low_orig = x_low
             x_low_pooled = self.avgpool(x_low)
             high_freq = x_low_orig - F.interpolate(x_low_pooled, size=(H, W), mode='nearest')

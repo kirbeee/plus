@@ -79,7 +79,7 @@ def main(args):
     feature_extractor, hash_generator = load_models(args)
 
     metics_to_run = [
-        EERMetric(),
+        EERMetric("EER & Best ACC"),
     ]
     evaluator = ModelEvaluator(args, metics_to_run)
     hash_user, label = evaluator.extract_features(test_loader, feature_extractor, hash_generator)
@@ -90,10 +90,10 @@ def main(args):
         print(f"[{metric_name}]")
         for key, val in metric_result.items():
             if isinstance(val, float):
-                print(f"   - {key}: {val * 100:.4f}%" if "EER" in key or "ACC" in key else f"   - {key}: {val:.4f}")
+                print(f"   - {key}: {val:.4f}%" if "EER" in key or "ACC" in key else f"   - {key}: {val:.4f}")
             else:
                 print(f"   - {key}: {val}")
-    print(f"========================================================================")
+    print(f"==============================================================")
 
 if __name__ == '__main__':
     args = configs.get_all_params()

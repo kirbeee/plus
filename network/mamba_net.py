@@ -28,7 +28,7 @@ class Mamba_PFE_Block(nn.Module):
     def forward(self, x):
         b, c, h, w = x.shape
 
-        x = x + self.attn(self.norm1(x.reshape(b, c, -1).transpose(-2, -1).contiguous()).transpose(-2, -1)
+        x = x + self.mamba(self.norm1(x.reshape(b, c, -1).transpose(-2, -1).contiguous()).transpose(-2, -1)
                           .contiguous().reshape(b, c, h, w))
         x = x + self.ffn(self.norm2(x.reshape(b, c, -1).transpose(-2, -1).contiguous()).transpose(-2, -1)
                          .contiguous().reshape(b, c, h, w))

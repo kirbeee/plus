@@ -4,9 +4,9 @@ import random
 import argparse
 import numpy as np
 
-DATASET_ROOT = '/mnt/c/Users/peter/plus/datasets'
-ANNOTATION_ROOT = '/mnt/c/Users/peter/plus/annotation'
-MODEL_ROOT = '/mnt/c/Users/peter/plus/model'
+DATASET_ROOT = '/mnt/c/Users/msp/Documents/git-repo/plus/datasets'
+ANNOTATION_ROOT = '/mnt/c/Users/msp/Documents/git-repo/plus/annotation'
+MODEL_ROOT = '/mnt/c/Users/msp/Documents/git-repo/plus/model'
 
 DATASET_CONFIGS = {
     'PLUSVein-FV3-LED':{

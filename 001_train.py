@@ -8,7 +8,7 @@ from tqdm import tqdm
 import configs
 import datasets
 from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
-from network.logits import ArcFace
+from network.fsb_logits import ArcFace
 
 
 def train(args):

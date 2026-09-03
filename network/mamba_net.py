@@ -60,11 +60,11 @@ class Mamba_Hash_Net(nn.Module):
 
         # --- stride-2 down-sampling transitions ---
         self.conv_23 = Depth_Wise(64, 64, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=128)
-        self.conv_3 = MambaBottleneck(64, num_block=4, index=1, d_state=d_state, d_conv=d_conv, expand=expand, ssm_ratio=ssm_ratio, drop_rate=do_prob)
+        # self.conv_3 = MambaBottleneck(64, num_block=4, index=1, d_state=d_state, d_conv=d_conv, expand=expand, ssm_ratio=ssm_ratio, drop_rate=do_prob)
         self.conv_34 = Depth_Wise(64, 128, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=256)
-        self.conv_4 = MambaBottleneck(128, num_block=6, index=2,d_state=d_state, d_conv=d_conv, expand=expand, ssm_ratio=ssm_ratio, drop_rate=do_prob)
+        # self.conv_4 = MambaBottleneck(128, num_block=6, index=2,d_state=d_state, d_conv=d_conv, expand=expand, ssm_ratio=ssm_ratio, drop_rate=do_prob)
         self.conv_45 = Depth_Wise(128, 128, kernel=(3, 3), stride=(2, 2), padding=(1, 1), groups=512)
-        self.conv_5 = MambaBottleneck(128, num_block=2, index=3, d_state=d_state, d_conv=d_conv, expand=expand, ssm_ratio=ssm_ratio, drop_rate=do_prob)
+        # self.conv_5 = MambaBottleneck(128, num_block=2, index=3, d_state=d_state, d_conv=d_conv, expand=expand, ssm_ratio=ssm_ratio, drop_rate=do_prob)
 
         # --- head ---
         self.conv_6_sep = Conv_block(128, 512, kernel=(1, 1), stride=(1, 1), padding=(0, 0))
@@ -85,15 +85,15 @@ class Mamba_Hash_Net(nn.Module):
 
         out = self.encoder_1(out)
         out = self.conv_23(out)
-        out = self.conv_3(out)
+        # out = self.conv_3(out)
 
         out = self.encoder_2(out)
         out = self.conv_34(out)
-        out = self.conv_4(out)
+        # out = self.conv_4(out)
 
         out = self.encoder_3(out)
         out = self.conv_45(out)
-        out = self.conv_5(out)
+        # out = self.conv_5(out)
 
         out = self.conv_6_sep(out)
         emb = self.conv_6_dw(out)

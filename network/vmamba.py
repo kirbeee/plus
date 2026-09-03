@@ -7,12 +7,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from einops import rearrange, repeat
-from timm.models.layers import DropPath, trunc_normal_
+from timm.layers import DropPath, trunc_normal_
 
-try:
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
-except:
-    pass
+from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
 
 # an alternative for mamba_ssm (in which causal_conv1d is needed)
 try:

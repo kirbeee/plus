@@ -6,7 +6,7 @@ import configs
 import datasets
 from network.fsb_hash_net import FSB_Hash_Net, Hash_Generator
 from network.mamba_net import Mamba_Hash_Net
-from testkit.EER_metric import EERMetric
+from testkit.eer_metric import EERMetric
 from testkit.unlinkability_metric import UnlinkabilityMetric
 
 def load_models(args):
@@ -80,6 +80,7 @@ def main(args):
 
     metics_to_run = [
         EERMetric("EER & Best ACC"),
+        UnlinkabilityMetric()
     ]
     evaluator = ModelEvaluator(args, metics_to_run)
     hash_user, label = evaluator.extract_features(test_loader, feature_extractor, hash_generator)

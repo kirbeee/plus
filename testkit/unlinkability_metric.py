@@ -17,13 +17,18 @@ __version__ = "2.0"
 
 import numpy as np
 import matplotlib
+
+from testkit import eer_metric
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pylab
 import seaborn as sns
+from .eer_metric import BaseMetric
 
-class UnlinkabilityMetric:
+class UnlinkabilityMetric(BaseMetric):
     def __init__(self, mated_scores, non_mated_scores, omega=1.0, n_bins=-1):
+        super(UnlinkabilityMetric, self).__init__(name)
         self.mated_scores = np.array(mated_scores)
         self.non_mated_scores = np.array(non_mated_scores)
         self.omega = omega
